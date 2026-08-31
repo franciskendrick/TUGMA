@@ -64,7 +64,7 @@ tugma/
 
 ### Entity Relationship Diagram
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'mainBkg': '#ffffff', 'background': '#ffffff'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff'}}}%%
 erDiagram
     %% Core Parent Entities
     STUDENTS {
