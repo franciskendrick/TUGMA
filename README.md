@@ -64,22 +64,7 @@ tugma/
 
 ### Entity Relationship Diagram
 ```mermaid
-%%{
-  init: {
-    'theme': 'base',
-    'themeVariables': {
-      'primaryColor': '#1e293b',
-      'primaryTextColor': '#f8fafc',
-      'primaryBorderColor': '#38bdf8',
-      'lineColor': '#38bdf8',
-      'secondaryColor': '#0f172a',
-      'tertiaryColor': '#1e293b',
-      'attributeColorOdd': '#1e293b',
-      'attributeColorEven': '#0f172a',
-      'fontFamily': 'ui-sans-serif, system-ui, sans-serif'
-    }
-  }
-}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'mainBkg': '#ffffff', 'background': '#ffffff'}}}%%
 erDiagram
     %% Core Parent Entities
     STUDENTS {
