@@ -1,0 +1,107 @@
+/* style.css — High-Contrast Cyberpunk / Modern Dark Emerald Redesign */
+
+/* 1. Global App Background & Typography */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
+
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #0d1117 !important; /* Very dark slate blue-gray */
+    font-family: 'Fira Code', monospace !important;
+}
+
+/* 2. Main Content Canvas Styling */
+[data-testid="stHeader"] {
+    background-color: transparent !important;
+}
+
+[data-testid="stMainBlockContainer"] {
+    background: linear-gradient(135deg, #161b22 0%, #0e131b 100%) !important;
+    border: 2px solid #30363d !important;
+    border-radius: 16px !important;
+    padding: 3rem !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+    margin-top: 2rem !important;
+}
+
+/* 3. Sidebar Resampling */
+[data-testid="stSidebar"] {
+    background-color: #010409 !important;
+    border-right: 2px dashed #238636 !important;
+}
+
+/* 4. Text & Header Overrides */
+h1, h2, h3, h4, h5, h6, span, label, p {
+    color: #58a6ff !important; /* Bright Neon Cyan */
+}
+
+h1 {
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+    border-bottom: 2px solid #238636 !important;
+    padding-bottom: 10px !important;
+}
+
+/* 5. Input Fields Styling */
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] div {
+    background-color: #0d1117 !important;
+    color: #3fb950 !important; /* Matrix Green Text */
+    border: 1px solid #30363d !important;
+    border-radius: 8px !important;
+    font-family: 'Fira Code', monospace !important;
+}
+
+[data-testid="stTextInput"] input:focus {
+    border-color: #58a6ff !important;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.5) !important;
+}
+
+/* 6. High-Contrast Primary Buttons */
+button[kind="primary"] {
+    background: linear-gradient(90deg, #238636 0%, #2ea043 100%) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+button[kind="primary"]:hover {
+    transform: scale(1.02) !important;
+    box-shadow: 0 0 15px rgba(46, 160, 67, 0.8) !important;
+}
+
+/* 7. Containers / Cards Border Styling */
+[data-testid="stMetricValue"] {
+    color: #3fb950 !important;
+    font-size: 2.2rem !important;
+}
+
+div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column;"] {
+    background-color: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-left: 4px solid #58a6ff !important;
+}
+
+/* Target Streamlit's main app container */
+[data-testid="stAppViewContainer"] {
+    background-image: url("https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=2000");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+/* Make headers and top navigation bar transparent so the background shows through */
+[data-testid="stHeader"] {
+    background-color: rgba(0, 0, 0, 0) !important;
+}
+
+/* Optional: Add a subtle dark overlay behind main content to keep text readable */
+[data-testid="stMainBlockContainer"] {
+    background-color: rgba(13, 17, 23, 0.85) !important;
+    border-radius: 16px;
+    padding: 2rem !important;
+    margin-top: 2rem;
+    backdrop-filter: blur(8px); /* Gives a glassmorphism effect */
+}
