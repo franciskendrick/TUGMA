@@ -34,7 +34,9 @@ CREATE TABLE tutors (
     grade_level INTEGER NOT NULL CHECK (grade_level > 0),
     course      TEXT NOT NULL,
     verified    INTEGER NOT NULL DEFAULT 0
-                CHECK (verified IN (0, 1))
+                CHECK (verified IN (0, 1)),
+    capacity    INTEGER NOT NULL DEFAULT 5
+                CHECK (capacity > 0)
 );
 
 
