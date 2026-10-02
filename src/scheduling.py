@@ -8,51 +8,76 @@ from src.database import Database
 class ScheduleManager:
     # Handles academic schedules and available tutoring times.
 
-    DEFAULT_DAY_START = time(7, 0)  # start: 7am
-    DEFAULT_DAY_END = time(17, 0)  # end: 5pm
+    DEFAULT_DAY_START = time(7, 0)
+    DEFAULT_DAY_END = time(17, 0)
+    SLOT_MINUTES = 15
 
-    DAY_ORDER = {
-        "Monday": 0,
-        "Tuesday": 1,
-        "Wednesday": 2,
-        "Thursday": 3,
-        "Friday": 4,
-        "Saturday": 5,
-        "Sunday": 6,
-    }
+    DAY_ORDER = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ]
 
     def __init__(self, database=None):
-        self.db = database if database is not None else Database()
+        if database is None:
+            database = Database()
+
+        self.db = database
 
     # Helper methods ------------------------------------------
-    @staticmethod
-    def _to_time(value):
-        """Convert HH:MM text into a datetime.time object."""
+    def _to_time(self, value):
+        """Convert an HH:MM string or time object into a time object."""
         if isinstance(value, time):
             return value
 
         return datetime.strptime(value, "%H:%M").time()
 
-    @staticmethod
-    def _format_time(value):
-        """Convert a datetime.time object into HH:MM text."""
-        return value.strftime("%H:%M")
-
-    @staticmethod
-    def _overlap(start1, end1, start2, end2):
-        """Return the overlapping interval between two time ranges."""
-
+    def _overlap(self, start1, end1, start2, end2):
+        """Return the overlapping time range between two intervals."""
         start = max(start1, start2)
         end = min(end1, end2)
 
-        if start >= end:
-            return None
+        if start < end:
+            return start, end
 
-        return start, end
+        return None
+
+    def _round_up_to_15_minutes(self, value):
+        """Round a time up to the nearest 15-minute interval."""
+        total_minutes = value.hour * 60 + value.minute
+
+        rounded_minutes = (
+            (total_minutes + self.SLOT_MINUTES - 1)
+            // self.SLOT_MINUTES
+        ) * self.SLOT_MINUTES
+
+        if rounded_minutes >= 24 * 60:
+            return time(23, 59)
+
+        return time(
+            rounded_minutes // 60,
+            rounded_minutes % 60
+        )
+
+    def _round_down_to_15_minutes(self, value):
+        """Round a time down to the nearest 15-minute interval."""
+        total_minutes = value.hour * 60 + value.minute
+
+        rounded_minutes = (
+            total_minutes // self.SLOT_MINUTES
+        ) * self.SLOT_MINUTES
+
+        return time(
+            rounded_minutes // 60,
+            rounded_minutes % 60
+        )
 
     # Retrieve student's classes
     def get_student_schedule(self, student_id):
-        """Retrieve all classes belonging to a student."""
+        """Retrieve a student's class schedule."""
 
         query = """
             SELECT
@@ -65,6 +90,7 @@ class ScheduleManager:
             JOIN subjects s
                 ON ss.subject_id = s.subject_id
             WHERE ss.student_id = ?
+            AND ss.day != 'Sunday'
             ORDER BY
                 CASE ss.day
                     WHEN 'Monday' THEN 1
@@ -73,7 +99,6 @@ class ScheduleManager:
                     WHEN 'Thursday' THEN 4
                     WHEN 'Friday' THEN 5
                     WHEN 'Saturday' THEN 6
-                    WHEN 'Sunday' THEN 7
                 END,
                 ss.start_time
         """
@@ -101,10 +126,10 @@ class ScheduleManager:
         day_end=None
     ):
         """
-        Determine when a student is free.
+        Determine the student's free time from Monday to Saturday.
 
-        The default tutoring window is 08:00–18:00.
-        This can be changed when calling the method.
+        The default daily window is 07:00–17:00.
+        Free time is represented using 15-minute intervals.
         """
 
         if day_start is None:
@@ -113,27 +138,23 @@ class ScheduleManager:
         if day_end is None:
             day_end = self.DEFAULT_DAY_END
 
+        day_start = self._to_time(day_start)
+        day_end = self._to_time(day_end)
+
         schedule = self.get_student_schedule(student_id)
 
         free_slots = []
 
         for day in self.DAY_ORDER:
-            classes = [
-                item for item in schedule
+            day_classes = [
+                item
+                for item in schedule
                 if item["day"] == day
             ]
 
-            if not classes:
-                free_slots.append({
-                    "day": day,
-                    "start_time": day_start,
-                    "end_time": day_end,
-                })
-                continue
-
             current_time = day_start
 
-            for class_item in classes:
+            for class_item in day_classes:
                 class_start = max(
                     class_item["start_time"],
                     day_start
@@ -144,35 +165,52 @@ class ScheduleManager:
                     day_end
                 )
 
-                # Ignore classes outside the tutoring window.
+                # Ignore classes completely outside the daily window.
                 if class_end <= day_start or class_start >= day_end:
                     continue
 
-                # Free time before this class.
+                # Add free time before the class.
                 if current_time < class_start:
-                    free_slots.append({
-                        "day": day,
-                        "start_time": current_time,
-                        "end_time": class_start,
-                    })
+                    free_start = self._round_up_to_15_minutes(
+                        current_time
+                    )
 
-                # Move past the class.
+                    free_end = self._round_down_to_15_minutes(
+                        class_start
+                    )
+
+                    if free_start < free_end:
+                        free_slots.append({
+                            "day": day,
+                            "start_time": free_start,
+                            "end_time": free_end
+                        })
+
                 if class_end > current_time:
                     current_time = class_end
 
-            # Free time after the final class.
+            # Add free time after the final class.
             if current_time < day_end:
-                free_slots.append({
-                    "day": day,
-                    "start_time": current_time,
-                    "end_time": day_end,
-                })
+                free_start = self._round_up_to_15_minutes(
+                    current_time
+                )
+
+                free_end = self._round_down_to_15_minutes(
+                    day_end
+                )
+
+                if free_start < free_end:
+                    free_slots.append({
+                        "day": day,
+                        "start_time": free_start,
+                        "end_time": free_end
+                    })
 
         return free_slots
 
     # Retrieve tutor availability
     def get_tutor_available_slots(self, tutor_id):
-        """Retrieve all availability periods belonging to a tutor."""
+        """Retrieve tutor availability from Monday to Saturday."""
 
         query = """
             SELECT
@@ -181,6 +219,7 @@ class ScheduleManager:
                 end_time
             FROM tutor_availability
             WHERE tutor_id = ?
+            AND day != 'Sunday'
             ORDER BY
                 CASE day
                     WHEN 'Monday' THEN 1
@@ -189,7 +228,6 @@ class ScheduleManager:
                     WHEN 'Thursday' THEN 4
                     WHEN 'Friday' THEN 5
                     WHEN 'Saturday' THEN 6
-                    WHEN 'Sunday' THEN 7
                 END,
                 start_time
         """
@@ -199,29 +237,51 @@ class ScheduleManager:
         availability = []
 
         for row in rows:
-            availability.append({
-                "day": row["day"],
-                "start_time": self._to_time(row["start_time"]),
-                "end_time": self._to_time(row["end_time"]),
-            })
+            start_time = self._to_time(row["start_time"])
+            end_time = self._to_time(row["end_time"])
+
+            # Restrict tutor availability to the daily window.
+            start_time = max(
+                start_time,
+                self.DEFAULT_DAY_START
+            )
+
+            end_time = min(
+                end_time,
+                self.DEFAULT_DAY_END
+            )
+
+            if start_time >= end_time:
+                continue
+
+            # Make availability compatible with 15-minute intervals.
+            start_time = self._round_up_to_15_minutes(start_time)
+            end_time = self._round_down_to_15_minutes(end_time)
+
+            if start_time < end_time:
+                availability.append({
+                    "day": row["day"],
+                    "start_time": start_time,
+                    "end_time": end_time
+                })
 
         return availability
 
     # Calculate common available times
     def find_common_slots(self, tutor, student):
         """
-        Find common available periods between a tutor and a student.
+        Find times when both the tutor and student are available.
 
-        tutor and student are IDs.
+        The returned slots are compatible with 15-minute intervals.
         """
 
-        student_free = self.get_student_free_slots(student)
-        tutor_available = self.get_tutor_available_slots(tutor)
+        student_free_slots = self.get_student_free_slots(student)
+        tutor_slots = self.get_tutor_available_slots(tutor)
 
         common_slots = []
 
-        for student_slot in student_free:
-            for tutor_slot in tutor_available:
+        for student_slot in student_free_slots:
+            for tutor_slot in tutor_slots:
 
                 if student_slot["day"] != tutor_slot["day"]:
                     continue
@@ -230,52 +290,54 @@ class ScheduleManager:
                     student_slot["start_time"],
                     student_slot["end_time"],
                     tutor_slot["start_time"],
-                    tutor_slot["end_time"],
+                    tutor_slot["end_time"]
                 )
 
                 if overlap is None:
                     continue
 
-                start, end = overlap
+                start_time, end_time = overlap
 
-                common_slots.append({
-                    "day": student_slot["day"],
-                    "start_time": start,
-                    "end_time": end,
-                })
+                start_time = self._round_up_to_15_minutes(
+                    start_time
+                )
+
+                end_time = self._round_down_to_15_minutes(
+                    end_time
+                )
+
+                if start_time < end_time:
+                    common_slots.append({
+                        "day": student_slot["day"],
+                        "start_time": start_time,
+                        "end_time": end_time
+                    })
 
         return common_slots
 
     # Check schedule conflict
     def has_schedule_conflict(self, student, slot):
-        """
-        Check whether a proposed tutoring slot conflicts
-        with any of the student's classes.
-
-        slot must contain:
-            day
-            start_time
-            end_time
-        """
+        """Check whether a proposed tutoring slot conflicts with a class."""
 
         schedule = self.get_student_schedule(student)
 
+        slot_day = slot["day"]
         slot_start = self._to_time(slot["start_time"])
         slot_end = self._to_time(slot["end_time"])
 
         for class_item in schedule:
 
-            if class_item["day"] != slot["day"]:
+            if class_item["day"] != slot_day:
                 continue
 
-            overlap = self._overlap(
-                class_item["start_time"],
-                class_item["end_time"],
+            conflict = self._overlap(
                 slot_start,
                 slot_end,
+                class_item["start_time"],
+                class_item["end_time"]
             )
 
-            if overlap is not None:
+            if conflict is not None:
                 return True
 
         return False
