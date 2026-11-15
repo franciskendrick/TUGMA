@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+from services.auth_service import PermissionDenied, get_user, require_role
+from services.migrations import DB_PATH, ensure_database
+from views.auth import render_auth
 from src.database import Database
 from src.sets import SetOperations
 from src.scheduling import ScheduleManager
@@ -23,11 +26,6 @@ from src.graph import BipartiteGraph
 from src.matching import CapacityMatcher
 from src.visualization import TUGMAVisualizer
 
-
-ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "database" / "tugma.db"
-SCHEMA_PATH = ROOT / "database" / "schema.sql"
-SEED_PATH = ROOT / "database" / "seed.sql"
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 LANGUAGES = ["Filipino", "English"]
@@ -62,27 +60,34 @@ def slots_to_df(slots):
     )
 
 
-def init_database(reset=False):
-    """Create database/tugma.db from schema.sql and seed.sql if needed."""
-    DB_PATH.parent.mkdir(exist_ok=True)
-
-    if reset and DB_PATH.exists():
-        DB_PATH.unlink()
-
-    if DB_PATH.exists():
-        return
-
-    connection = sqlite3.connect(DB_PATH)
+def reset_database(admin_user_id):
+    """Restore the seed data. Administrator accounts are kept."""
+    db = Database(DB_PATH)
     try:
-        connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-        connection.executescript(SEED_PATH.read_text(encoding="utf-8"))
-        connection.commit()
-    except Exception:
-        connection.close()
-        DB_PATH.unlink(missing_ok=True)
-        raise
-    else:
-        connection.close()
+        require_role(db, admin_user_id, "admin")  # re-checked server-side
+        admins = [
+            tuple(r)
+            for r in db.fetch_all(
+                "SELECT email, password_hash, display_name "
+                "FROM users WHERE role = 'admin'"
+            )
+        ]
+    finally:
+        db.close()
+
+    DB_PATH.unlink()
+    ensure_database()
+
+    db = Database(DB_PATH)
+    try:
+        for admin in admins:
+            db.execute(
+                "INSERT INTO users (email, password_hash, role, display_name) "
+                "VALUES (?, ?, 'admin', ?)",
+                admin,
+            )
+    finally:
+        db.close()
 
 
 class Services:
@@ -249,11 +254,8 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
 class TUGMAApp:
     """Controls the overall Streamlit application."""
 
-    def run(self):
-        st.set_page_config(
-            page_title="TUGMA", page_icon="🎓", layout="wide"
-        )
-        init_database()
+    def render(self, admin_user_id):
+        self.admin_user_id = admin_user_id
 
         st.title("TUGMA")
         st.caption(
@@ -314,7 +316,7 @@ class TUGMAApp:
         st.sidebar.header("Database")
         confirm = st.sidebar.checkbox("I want to reset to the seed data")
         if st.sidebar.button("Reset database", disabled=not confirm):
-            init_database(reset=True)
+            reset_database(self.admin_user_id)
             st.cache_data.clear()
             st.rerun()
 
@@ -724,4 +726,42 @@ class TUGMAApp:
             db.close()
 
 
-TUGMAApp().run()
+def main():
+    st.set_page_config(page_title="TUGMA", page_icon="🎓", layout="wide")
+    ensure_database()
+
+    session_user = st.session_state.get("user")
+    if session_user is None:
+        render_auth(DB_PATH)
+        return
+
+    # Re-verify the account on every rerun (disabled or deleted accounts
+    # lose access immediately).
+    db = Database(DB_PATH)
+    try:
+        user = get_user(db, session_user["user_id"])
+    finally:
+        db.close()
+
+    if user is None:
+        st.session_state.pop("user", None)
+        st.rerun()
+
+    st.session_state["user"] = user
+    st.sidebar.markdown(f"**{user['name']}**  \n{user['role'].title()}")
+    if st.sidebar.button("Log out"):
+        st.session_state.pop("user", None)
+        st.rerun()
+    st.sidebar.divider()
+
+    if user["role"] == "admin":
+        TUGMAApp().render(user["user_id"])
+    else:
+        st.title("TUGMA")
+        st.info(
+            f"Welcome, {user['name']}. The {user['role']} dashboard is built "
+            "in the next phase."
+        )
+
+
+main()
