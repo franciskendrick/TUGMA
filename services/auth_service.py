@@ -206,3 +206,28 @@ def login(db, email, password):
         raise AuthError("This account is disabled. Contact an administrator.")
 
     return _session_dict(row)
+
+
+# ------------------------------------------------------- account management
+def list_accounts(db, admin_user_id):
+    """All accounts. Administrators only."""
+    require_role(db, admin_user_id, "admin")
+    rows = db.fetch_all(
+        _USER_QUERY + " ORDER BY u.created_at, u.user_id"
+    )
+    return [
+        {**_session_dict(r), "is_active": bool(r["is_active"])} for r in rows
+    ]
+
+
+def set_account_active(db, admin_user_id, target_user_id, active):
+    """Enable or disable an account. Administrators only; not your own."""
+    require_role(db, admin_user_id, "admin")
+    if target_user_id == admin_user_id:
+        raise AuthError("You cannot disable your own account.")
+    cursor = db.execute(
+        "UPDATE users SET is_active = ? WHERE user_id = ?",
+        (1 if active else 0, target_user_id),
+    )
+    if cursor.rowcount == 0:
+        raise AuthError("That account does not exist.")
