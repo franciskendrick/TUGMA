@@ -81,3 +81,55 @@ def test_tutor_without_reviews_returns_empty_aggregates(db):
     assert summary["rated_students"] == 0
     assert db.get_tutor_rating_breakdown(2) == []
     assert db.get_tutor_certificates(2) == []
+
+
+def test_student_profile_retrieval_includes_academic_and_account_data(db):
+    from services.profile_service import get_student_profile_data
+
+    data = get_student_profile_data(db, 1)
+    assert data is not None
+    assert data["profile"]["name"] == "Student A"
+    assert data["profile"]["course"] == "BCS"
+    assert data["profile"]["bio"]
+    assert data["profile"]["email"] is None  # Seed profiles need not have login accounts.
+    assert data["languages"] == ["English", "Filipino"]
+    assert any(row["subject_code"] == "S-CSPC212" for row in data["subjects"])
+    assert any(row["day"] == "Monday" for row in data["schedule"])
+
+
+def test_student_profile_tabs_exclude_tutor_features():
+    from services.profile_service import get_profile_tabs
+
+    tabs = get_profile_tabs("Learning")
+    assert tabs == ("About", "Info", "Classes")
+    assert "Reviews" not in tabs
+    assert "Certificates" not in tabs
+
+
+def test_tutor_profile_tabs_remain_unchanged():
+    from services.profile_service import get_profile_tabs
+
+    assert get_profile_tabs("Tutoring") == (
+        "About", "Info", "Classes", "Reviews", "Certificates"
+    )
+
+
+def test_student_profile_handles_missing_optional_content(db):
+    from services.profile_service import get_student_profile_data
+
+    db.execute(
+        "UPDATE students SET bio=NULL, study_notes=NULL, interests=NULL WHERE student_id=?",
+        (7,),
+    )
+    data = get_student_profile_data(db, 7)
+    assert data["profile"]["bio"] is None
+    assert data["profile"]["study_notes"] is None
+    assert data["profile"]["interests"] is None
+    assert data["subjects"]
+    assert data["schedule"]
+
+
+def test_student_profile_missing_record_returns_none(db):
+    from services.profile_service import get_student_profile_data
+
+    assert get_student_profile_data(db, 999) is None

@@ -298,12 +298,40 @@ PRAGMA user_version = 4;
 COMMIT;
 """
 
+
+# Migration 5: optional student-facing profile details. Existing rows remain valid.
+MIGRATION_5_STUDENT_PROFILE = """
+BEGIN;
+ALTER TABLE students ADD COLUMN bio TEXT;
+ALTER TABLE students ADD COLUMN study_notes TEXT;
+ALTER TABLE students ADD COLUMN interests TEXT;
+UPDATE students SET
+    bio = CASE student_id
+        WHEN 1 THEN 'Computer Science student focused on building a strong foundation in programming and discrete mathematics.'
+        WHEN 2 THEN 'Undergraduate student interested in problem-solving and collaborative learning.'
+        WHEN 3 THEN 'Information Technology student exploring practical applications of computing.'
+        ELSE NULL END,
+    study_notes = CASE student_id
+        WHEN 1 THEN 'Prefers structured explanations, worked examples, and practice problems.'
+        WHEN 2 THEN 'Learns best through guided examples and discussion.'
+        WHEN 3 THEN 'Prefers practical exercises and step-by-step demonstrations.'
+        ELSE NULL END,
+    interests = CASE student_id
+        WHEN 1 THEN 'Programming, mathematics, and software development'
+        WHEN 2 THEN 'Technology, problem-solving, and collaborative projects'
+        WHEN 3 THEN 'Application development and emerging technologies'
+        ELSE NULL END;
+PRAGMA user_version = 5;
+COMMIT;
+"""
+
 # (target_version, script). Append new migrations here.
 MIGRATIONS = [
     (1, MIGRATION_1_USERS),
     (2, MIGRATION_2_DUAL_ROLE),
     (3, MIGRATION_3_SESSIONS),
     (4, MIGRATION_4_TUTOR_PROFILES),
+    (5, MIGRATION_5_STUDENT_PROFILE),
 ]
 
 

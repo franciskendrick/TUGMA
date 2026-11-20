@@ -107,3 +107,10 @@ erDiagram
 
 The profile tables are independent of the matching tables. Their values do not
 participate in compatibility predicates or capacity-constrained matching.
+
+
+## Student profile details (migration 5)
+
+The `students` table gains three optional presentation fields: `bio`, `study_notes`, and `interests`. Existing student rows remain valid; missing values are displayed with UI fallbacks. Migration 5 supplies demonstration text for selected seeded students.
+
+Student profile retrieval also joins the existing `users`, `student_subjects`, `student_languages`, and `student_schedule` tables. These are read-only profile views of existing account, learning-needs, language, and class-schedule data; no matching rules or relationships are changed.

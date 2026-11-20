@@ -87,7 +87,7 @@ def render_portal(user):
     )
     page = st.sidebar.radio("Go to", PAGES, key="portal_page")
     if page == "Profile":
-        render_profile(user)
+        render_profile(user, mode)
         return
 
     st.header(page)

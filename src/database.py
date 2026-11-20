@@ -131,3 +131,56 @@ class Database:
             """,
             (tutor_id,),
         )
+    # ----------------------------------------------------- student profile data
+    def get_student_profile(self, student_id):
+        """Fetch student details and the linked account metadata, if available."""
+        return self.fetch_one(
+            """
+            SELECT s.student_id, s.name, s.grade_level, s.course,
+                   s.bio, s.study_notes, s.interests,
+                   u.email, u.created_at, u.is_active
+            FROM students s
+            LEFT JOIN users u ON u.student_id = s.student_id
+            WHERE s.student_id = ?
+            """,
+            (student_id,),
+        )
+
+    def get_student_subjects(self, student_id):
+        """Return the subjects a student registered as needing help with."""
+        return self.fetch_all(
+            """
+            SELECT sub.subject_id, sub.subject_code, sub.subject_name, ss.note
+            FROM student_subjects ss
+            JOIN subjects sub USING (subject_id)
+            WHERE ss.student_id = ?
+            ORDER BY sub.subject_code
+            """,
+            (student_id,),
+        )
+
+    def get_student_languages(self, student_id):
+        """Return the languages listed on a student's profile."""
+        return self.fetch_all(
+            "SELECT language FROM student_languages WHERE student_id = ? ORDER BY language",
+            (student_id,),
+        )
+
+    def get_student_class_schedule(self, student_id):
+        """Return the student's registered weekly class schedule."""
+        return self.fetch_all(
+            """
+            SELECT ss.schedule_id, ss.day, ss.start_time, ss.end_time,
+                   sub.subject_code, sub.subject_name
+            FROM student_schedule ss
+            JOIN subjects sub USING (subject_id)
+            WHERE ss.student_id = ?
+            ORDER BY CASE ss.day
+                WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2
+                WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4
+                WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 ELSE 7 END,
+                ss.start_time
+            """,
+            (student_id,),
+        )
+

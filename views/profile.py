@@ -5,7 +5,11 @@ import html
 import streamlit as st
 
 from services.migrations import DB_PATH
-from services.profile_service import get_tutor_profile_data
+from services.profile_service import (
+    get_profile_tabs,
+    get_student_profile_data,
+    get_tutor_profile_data,
+)
 from src.database import Database
 from views.components import initials
 
@@ -14,12 +18,125 @@ def _safe(value):
     return html.escape(str(value or ""))
 
 
-def render_profile(user):
-    """Render the signed-in user's tutor profile when one is available."""
+def render_profile(user, active_mode="Learning"):
+    """Render the profile matching the currently selected Learning/Tutoring mode."""
     st.title("Profile")
-    if user.get("tutor_id") is None:
-        st.info("This account does not have a tutor profile yet. Switch to Tutoring or add a tutor profile from Home.")
+    if active_mode == "Tutoring":
+        if user.get("tutor_id") is None:
+            st.info("This account does not have a tutor profile. Select Learning mode or add a tutor profile from Home.")
+            return
+        _render_tutor_profile(user)
         return
+
+    if user.get("student_id") is None:
+        st.info("This account does not have a student profile. Select Tutoring mode or add a student profile from Home.")
+        return
+    _render_student_profile(user)
+
+
+def _render_student_profile(user):
+    """Render the student-facing profile. Student tabs intentionally exclude tutor features."""
+    db = Database(DB_PATH)
+    try:
+        data = get_student_profile_data(db, user["student_id"])
+    finally:
+        db.close()
+
+    if not data:
+        st.error("Student profile not found.")
+        return
+
+    profile = data["profile"]
+    name = profile["name"]
+    course = profile.get("course") or "Program not specified"
+    year = profile.get("grade_level")
+    year_label = f"Year {year}" if year is not None else "Year level not specified"
+    active = profile.get("is_active")
+    account_status = "Active account" if active == 1 else (
+        "Inactive account" if active == 0 else "No linked account record"
+    )
+
+    st.markdown(
+        f"""<div class="tg-profile-hero">
+          <div class="tg-profile-avatar">{_safe(initials(name))}</div>
+          <div class="tg-profile-identity">
+            <div class="tg-profile-role">Student · Learning</div>
+            <h2>{_safe(name)}</h2>
+            <p>{_safe(course)} student</p>
+            <span class="tg-profile-verified">✓ Student profile</span>
+          </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    account_col, academic_col = st.columns([1, 1.5])
+    with account_col:
+        with st.container(border=True):
+            st.subheader("Account")
+            st.write(f"**Status:** {account_status}")
+            st.write(f"**Email:** {profile.get('email') or 'Not linked'}")
+            st.write(f"**Joined:** {profile.get('created_at') or 'Not available'}")
+    with academic_col:
+        with st.container(border=True):
+            st.subheader("Academic profile")
+            st.write("**De La Salle University – Dasmariñas**")
+            st.write(f"{_safe(course)} · {_safe(year_label)}")
+
+    about, info, classes = st.tabs(list(get_profile_tabs("Learning")))
+    with about:
+        st.subheader("About")
+        st.write(profile.get("bio") or "This student has not added a biography yet.")
+        st.subheader("Study notes")
+        st.write(profile.get("study_notes") or "No study preferences or learning notes have been added yet.")
+        st.subheader("Interests")
+        st.write(profile.get("interests") or "No interests have been added yet.")
+
+    with info:
+        st.subheader("Academic information")
+        c1, c2 = st.columns(2)
+        c1.metric("Program / course", course)
+        c2.metric("Year level", str(year) if year is not None else "—")
+        st.write("**School**")
+        st.write("De La Salle University – Dasmariñas")
+        st.write("**Department**")
+        st.write("Not specified in the current student record.")
+        st.write("**Languages**")
+        st.write(", ".join(data["languages"]) or "No languages specified.")
+        st.write("**Account status**")
+        st.write(account_status)
+
+    with classes:
+        st.subheader("Registered subjects")
+        if data["subjects"]:
+            for subject in data["subjects"]:
+                st.markdown(
+                    f"- **{_safe(subject['subject_code'])}** · {_safe(subject['subject_name'].title())}"
+                )
+                if subject.get("note"):
+                    st.caption(f"Study note: {_safe(subject['note'])}")
+        else:
+            st.info("No subjects have been added to this student's learning profile.")
+
+        st.subheader("Weekly class schedule")
+        if data["schedule"]:
+            st.dataframe(
+                [
+                    {
+                        "Day": row["day"],
+                        "Time": f"{row['start_time']}–{row['end_time']}",
+                        "Subject": f"{row['subject_code']} · {row['subject_name'].title()}",
+                    }
+                    for row in data["schedule"]
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+        else:
+            st.info("No weekly class schedule has been registered.")
+
+
+def _render_tutor_profile(user):
+    """Render the existing tutor profile without changing its tutor-only tabs."""
 
     db = Database(DB_PATH)
     try:
