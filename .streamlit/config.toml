@@ -1,0 +1,12 @@
+[theme]
+primaryColor = "#0b6b3a"
+backgroundColor = "#f3f7f5"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#10231a"
+font = "sans serif"
+
+# The dark green sidebar (needs a recent Streamlit; older versions ignore it).
+[theme.sidebar]
+backgroundColor = "#06301f"
+secondaryBackgroundColor = "#0b4a2f"
+textColor = "#e6f2ec"

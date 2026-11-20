@@ -15,6 +15,7 @@ class CompatibilityRelation:
         query = """
             SELECT tutor_id
             FROM tutors
+            WHERE verified = 1
             ORDER BY tutor_id
         """
 

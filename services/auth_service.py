@@ -12,7 +12,7 @@ import bcrypt
 BCRYPT_ROUNDS = 12
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72  # bcrypt ignores/rejects anything longer
-PUBLIC_ROLES = ("student", "tutor")
+PUBLIC_ROLES = ("student", "tutor", "both")
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -77,12 +77,19 @@ _USER_QUERY = """
 
 
 def _session_dict(row):
+    modes = []
+    if row["student_id"] is not None:
+        modes.append("Learning")
+    if row["tutor_id"] is not None:
+        modes.append("Tutoring")
+
     return {
         "user_id": row["user_id"],
         "email": row["email"],
-        "role": row["role"],
+        "role": row["role"],  # 'member' or 'admin'
         "student_id": row["student_id"],
         "tutor_id": row["tutor_id"],
+        "modes": modes,
         "name": row["name"],
     }
 
@@ -98,11 +105,16 @@ def get_user(db, user_id):
 def require_role(db, user_id, *roles):
     """Verify against the database (not the session) that the user may act.
 
-    Every protected operation calls this, so hiding a menu item is never
-    the only protection.
+    roles may contain 'admin', 'member', 'student' (has a student profile)
+    or 'tutor' (has a tutor profile).
     """
     user = get_user(db, user_id)
-    if user is None or user["role"] not in roles:
+    allowed = user is not None and (
+        user["role"] in roles
+        or ("student" in roles and user["student_id"] is not None)
+        or ("tutor" in roles and user["tutor_id"] is not None)
+    )
+    if not allowed:
         raise PermissionDenied("You do not have access to this operation.")
     return user
 
@@ -131,26 +143,27 @@ def register(db, full_name, email, password, confirm_password,
     connection = db.connect()
 
     try:
-        if role == "student":
+        student_id = tutor_id = None
+        if role in ("student", "both"):
             cursor = connection.execute(
                 "INSERT INTO students (name, grade_level, course) "
                 "VALUES (?, ?, ?)",
                 (full_name, grade_level, course),
             )
-            student_id, tutor_id = cursor.lastrowid, None
-        else:
+            student_id = cursor.lastrowid
+        if role in ("tutor", "both"):
             # New tutors are unverified until an administrator approves them.
             cursor = connection.execute(
                 "INSERT INTO tutors (name, grade_level, course, verified) "
                 "VALUES (?, ?, ?, 0)",
                 (full_name, grade_level, course),
             )
-            student_id, tutor_id = None, cursor.lastrowid
+            tutor_id = cursor.lastrowid
 
         cursor = connection.execute(
             "INSERT INTO users (email, password_hash, role, student_id, tutor_id) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (email, password_hash, role, student_id, tutor_id),
+            "VALUES (?, ?, 'member', ?, ?)",
+            (email, password_hash, student_id, tutor_id),
         )
         user_id = cursor.lastrowid
         connection.commit()
@@ -231,3 +244,34 @@ def set_account_active(db, admin_user_id, target_user_id, active):
     )
     if cursor.rowcount == 0:
         raise AuthError("That account does not exist.")
+
+
+def create_account_for_profile(db, email, password, student_id=None, tutor_id=None):
+    """Give an EXISTING student and/or tutor profile a login (setup scripts)."""
+    email = normalize_email(email)
+    _validate_email(email)
+    _validate_password(password, password)
+
+    if student_id is None and tutor_id is None:
+        raise AuthError("Choose a student or tutor profile.")
+    if student_id is not None and not db.fetch_one(
+        "SELECT 1 FROM students WHERE student_id = ?", (student_id,)
+    ):
+        raise AuthError("That student profile does not exist.")
+    if tutor_id is not None and not db.fetch_one(
+        "SELECT 1 FROM tutors WHERE tutor_id = ?", (tutor_id,)
+    ):
+        raise AuthError("That tutor profile does not exist.")
+
+    try:
+        cursor = db.execute(
+            "INSERT INTO users (email, password_hash, role, student_id, tutor_id) "
+            "VALUES (?, ?, 'member', ?, ?)",
+            (email, hash_password(password), student_id, tutor_id),
+        )
+    except sqlite3.IntegrityError as error:
+        raise AuthError(
+            "That email is taken, or the profile already has an account."
+        ) from error
+
+    return get_user(db, cursor.lastrowid)

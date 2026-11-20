@@ -44,8 +44,81 @@ PRAGMA user_version = 1;
 COMMIT;
 """
 
+# Migration 2: one account may hold a student profile, a tutor profile, or
+# both. SQLite cannot alter a CHECK, so the table is rebuilt (nothing else
+# references users). Old 'student'/'tutor' accounts become 'member'.
+MIGRATION_2_DUAL_ROLE = """
+BEGIN;
+CREATE TABLE users_new (
+    user_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL CHECK (role IN ('member', 'admin')),
+    student_id    INTEGER UNIQUE
+                  REFERENCES students(student_id)
+                  ON DELETE CASCADE ON UPDATE CASCADE,
+    tutor_id      INTEGER UNIQUE
+                  REFERENCES tutors(tutor_id)
+                  ON DELETE CASCADE ON UPDATE CASCADE,
+    display_name  TEXT,
+    is_active     INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (role = 'member' AND (student_id IS NOT NULL OR tutor_id IS NOT NULL))
+        OR (role = 'admin' AND student_id IS NULL AND tutor_id IS NULL
+            AND display_name IS NOT NULL)
+    )
+);
+INSERT INTO users_new
+    (user_id, email, password_hash, role, student_id, tutor_id,
+     display_name, is_active, created_at)
+SELECT user_id, email, password_hash,
+       CASE WHEN role = 'admin' THEN 'admin' ELSE 'member' END,
+       student_id, tutor_id, display_name, is_active, created_at
+FROM users;
+DROP TABLE users;
+ALTER TABLE users_new RENAME TO users;
+PRAGMA user_version = 2;
+COMMIT;
+"""
+
+# Migration 3: tutoring sessions (request -> confirm) and a "stuck on" note.
+MIGRATION_3_SESSIONS = """
+BEGIN;
+ALTER TABLE student_subjects ADD COLUMN note TEXT;
+CREATE TABLE sessions (
+    session_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id   INTEGER NOT NULL
+                 REFERENCES students(student_id)
+                 ON DELETE CASCADE ON UPDATE CASCADE,
+    tutor_id     INTEGER NOT NULL
+                 REFERENCES tutors(tutor_id)
+                 ON DELETE CASCADE ON UPDATE CASCADE,
+    subject_id   INTEGER NOT NULL
+                 REFERENCES subjects(subject_id)
+                 ON DELETE RESTRICT ON UPDATE CASCADE,
+    session_date TEXT NOT NULL
+                 CHECK (session_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    start_time   TEXT NOT NULL
+                 CHECK (start_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+    end_time     TEXT NOT NULL
+                 CHECK (end_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+    note         TEXT,
+    status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending', 'confirmed', 'declined', 'cancelled')),
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (start_time < end_time)
+);
+PRAGMA user_version = 3;
+COMMIT;
+"""
+
 # (target_version, script). Append new migrations here.
-MIGRATIONS = [(1, MIGRATION_1_USERS)]
+MIGRATIONS = [
+    (1, MIGRATION_1_USERS),
+    (2, MIGRATION_2_DUAL_ROLE),
+    (3, MIGRATION_3_SESSIONS),
+]
 
 
 def migrate(db):

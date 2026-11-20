@@ -51,6 +51,17 @@ class CompatibilityLogic:
 
         return bool(common_languages)
 
+    def not_self(self, tutor_id, student_id):
+        """A person who is both tutor and student is never paired with
+        themselves: NotSelf(t, s) = person(t) != person(s)."""
+
+        row = self.sets.db.fetch_one(
+            "SELECT 1 FROM users WHERE tutor_id = ? AND student_id = ?",
+            (tutor_id, student_id),
+        )
+
+        return row is None
+
     def evaluate(self, tutor_id, student_id):
         """
         Evaluate all predicates and return a detailed compatibility report.
@@ -60,10 +71,13 @@ class CompatibilityLogic:
         time_result = self.time_match(tutor_id, student_id)
         language_result = self.language_match(tutor_id, student_id)
 
+        self_result = self.not_self(tutor_id, student_id)
+
         compatible = (
             subject_result
             and time_result
             and language_result
+            and self_result
         )
 
         return {
@@ -72,6 +86,7 @@ class CompatibilityLogic:
             "subject_match": subject_result,
             "time_match": time_result,
             "language_match": language_result,
+            "not_self": self_result,
             "compatible": compatible
         }
 

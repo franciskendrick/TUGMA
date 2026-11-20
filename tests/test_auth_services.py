@@ -50,8 +50,8 @@ def test_migration_is_idempotent_and_preserves_seed(tmp_path):
     before = {t: count(database, t) for t in
               ("students", "tutors", "subjects", "student_schedule",
                "tutor_availability")}
-    assert migrate(database) == 1
-    assert migrate(database) == 1  # second run changes nothing
+    assert migrate(database) == 3
+    assert migrate(database) == 3  # second run changes nothing
     after = {t: count(database, t) for t in before}
     assert before == after
     assert before["students"] == 7 and before["tutors"] == 5
@@ -61,7 +61,8 @@ def test_migration_is_idempotent_and_preserves_seed(tmp_path):
 # ---- registration ----------------------------------------------------
 def test_register_student_creates_profile_and_account(db):
     user = reg(db)
-    assert user["role"] == "student" and user["student_id"] is not None
+    assert user["role"] == "member" and user["student_id"] is not None
+    assert user["tutor_id"] is None and user["modes"] == ["Learning"]
     assert user["name"] == "Ana Cruz"
     assert count(db, "students") == 8
 
@@ -105,7 +106,7 @@ def test_password_is_never_stored_in_plaintext(db):
 # ---- login -----------------------------------------------------------
 def test_login_success_and_failures(db):
     reg(db)
-    assert auth.login(db, " ANA@example.com ", "correct-horse")["role"] == "student"
+    assert auth.login(db, " ANA@example.com ", "correct-horse")["role"] == "member"
     with pytest.raises(AuthError, match="Invalid email or password"):
         auth.login(db, "ana@example.com", "wrong-password")
     with pytest.raises(AuthError, match="Invalid email or password"):
@@ -137,15 +138,15 @@ def test_admin_creation_and_role_checks(db):
 
 
 def test_database_rejects_inconsistent_role_profile_links(db):
-    with pytest.raises(sqlite3.IntegrityError):  # student without a profile
+    with pytest.raises(sqlite3.IntegrityError):  # member without any profile
         db.execute("INSERT INTO users (email,password_hash,role) "
-                   "VALUES ('a@b.co','x','student')")
+                   "VALUES ('a@b.co','x','member')")
     with pytest.raises(sqlite3.IntegrityError):  # admin with a profile
         db.execute("INSERT INTO users (email,password_hash,role,student_id,"
                    "display_name) VALUES ('c@d.co','x','admin',1,'A')")
-    with pytest.raises(sqlite3.IntegrityError):  # student pointing at a tutor
-        db.execute("INSERT INTO users (email,password_hash,role,student_id,"
-                   "tutor_id) VALUES ('e@f.co','x','student',1,1)")
+    with pytest.raises(sqlite3.IntegrityError):  # old role names are gone
+        db.execute("INSERT INTO users (email,password_hash,role,student_id) "
+                   "VALUES ('e@f.co','x','student',1)")
 
 
 def test_deleting_a_profile_removes_its_account(db):
@@ -159,7 +160,7 @@ def test_only_admins_can_list_or_disable_accounts(db):
     admin = auth.create_admin(db, "admin@example.com", "admin-password", "Admin")
     student = reg(db)
 
-    assert len(auth.list_accounts(db, admin["user_id"])) == 2
+    assert len(auth.list_accounts(db, admin["user_id"])) == 2  # admin + student
     with pytest.raises(PermissionDenied):
         auth.list_accounts(db, student["user_id"])
     with pytest.raises(PermissionDenied):
@@ -169,7 +170,7 @@ def test_only_admins_can_list_or_disable_accounts(db):
     with pytest.raises(AuthError, match="disabled"):
         auth.login(db, "ana@example.com", "correct-horse")
     auth.set_account_active(db, admin["user_id"], student["user_id"], True)
-    assert auth.login(db, "ana@example.com", "correct-horse")["role"] == "student"
+    assert auth.login(db, "ana@example.com", "correct-horse")["role"] == "member"
 
 
 def test_admin_cannot_disable_self(db):
