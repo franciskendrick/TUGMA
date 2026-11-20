@@ -64,3 +64,70 @@ class Database:
         if self.connection is not None:
             self.connection.close()
             self.connection = None
+
+    # ------------------------------------------------------ tutor profile data
+    def get_tutor_rating_summary(self, tutor_id):
+        """Return the overall review average and distinct review counts."""
+        return self.fetch_one(
+            """
+            SELECT ROUND(AVG(review_average), 2) AS overall_rating,
+                   COUNT(*) AS rated_sessions,
+                   COUNT(DISTINCT student_id) AS rated_students
+            FROM (
+                SELECT r.review_id, r.student_id, AVG(s.score) AS review_average
+                FROM tutor_reviews r
+                JOIN tutor_review_scores s ON s.review_id = r.review_id
+                WHERE r.tutor_id = ?
+                GROUP BY r.review_id, r.student_id
+            )
+            """,
+            (tutor_id,),
+        )
+
+    def get_tutor_rating_breakdown(self, tutor_id):
+        """Return criterion averages and rating counts for a tutor."""
+        return self.fetch_all(
+            """
+            SELECT criterion, ROUND(AVG(score), 2) AS average_rating,
+                   COUNT(*) AS rating_count
+            FROM tutor_review_scores scores
+            JOIN tutor_reviews reviews USING (review_id)
+            WHERE reviews.tutor_id = ?
+            GROUP BY criterion
+            ORDER BY CASE criterion
+                WHEN 'Clear explanations' THEN 1
+                WHEN 'Patience' THEN 2
+                WHEN 'Prepared for the session' THEN 3
+                WHEN 'Uses worked examples' THEN 4
+                WHEN 'Arrives on time' THEN 5 ELSE 6 END
+            """,
+            (tutor_id,),
+        )
+
+    def get_tutor_certificates(self, tutor_id):
+        """Return earned and in-progress certificates in display order."""
+        return self.fetch_all(
+            """
+            SELECT c.certificate_id, c.certificate_code, c.title, c.category,
+                   c.tier, c.description, c.requirement_label, c.target_value,
+                   tc.status, tc.progress_value, tc.earned_date
+            FROM tutor_certificates tc
+            JOIN certificates c USING (certificate_id)
+            WHERE tc.tutor_id = ?
+            ORDER BY CASE tc.status WHEN 'earned' THEN 0 ELSE 1 END,
+                     CASE c.tier WHEN 'Gold' THEN 0 WHEN 'Silver' THEN 1
+                                 WHEN 'Bronze' THEN 2 ELSE 3 END,
+                     c.title
+            """,
+            (tutor_id,),
+        )
+
+    def get_tutor_profile(self, tutor_id):
+        """Fetch the public academic profile fields used by the profile page."""
+        return self.fetch_one(
+            """
+            SELECT tutor_id, name, grade_level, course, verified, capacity
+            FROM tutors WHERE tutor_id = ?
+            """,
+            (tutor_id,),
+        )

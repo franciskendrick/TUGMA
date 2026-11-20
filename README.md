@@ -158,3 +158,17 @@ erDiagram
 ## Future Improvements
 
 ## License
+## Tutor profile, teaching ratings, and certificates
+
+The signed-in member can open **Profile** from the top-right control. Tutor profiles
+show academic information, tutoring subjects and availability, criterion-level
+teaching ratings, and earned or in-progress certificates. Rating aggregates and
+certificate progress are read by `services/profile_service.py`; SQLite access is
+provided by `src/database.py`.
+
+The profile schema is included in `database/schema.sql` and its demonstration
+records are included in `database/seed.sql`. Existing databases receive the same
+additive changes through migration version 4. The seeded tutor reviews are clearly
+identified as demonstration data (`is_demo = 1`) and are not genuine student
+feedback. Teaching ratings and certificates are display-only and do not affect
+the compatibility relation, graph, tutor capacity, or matching algorithm.

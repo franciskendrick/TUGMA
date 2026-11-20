@@ -210,5 +210,65 @@ CREATE TABLE tutor_availability (
 
 
 -- ============================================================
+
+
+-- ============================================================
+-- 10. TUTOR TEACHING REVIEWS AND CRITERION SCORES
+-- ============================================================
+
+CREATE TABLE tutor_reviews (
+    review_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tutor_id          INTEGER NOT NULL REFERENCES tutors(tutor_id)
+                      ON DELETE CASCADE ON UPDATE CASCADE,
+    student_id        INTEGER NOT NULL REFERENCES students(student_id)
+                      ON DELETE CASCADE ON UPDATE CASCADE,
+    session_reference TEXT NOT NULL,
+    review_date       TEXT NOT NULL,
+    is_demo           INTEGER NOT NULL DEFAULT 0 CHECK (is_demo IN (0, 1)),
+    UNIQUE (tutor_id, session_reference)
+);
+
+CREATE TABLE tutor_review_scores (
+    review_id   INTEGER NOT NULL REFERENCES tutor_reviews(review_id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+    criterion   TEXT NOT NULL CHECK (criterion IN (
+                    'Clear explanations',
+                    'Patience',
+                    'Prepared for the session',
+                    'Uses worked examples',
+                    'Arrives on time'
+                )),
+    score       INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+    PRIMARY KEY (review_id, criterion)
+);
+
+-- ============================================================
+-- 11. CERTIFICATE CATALOG AND TUTOR AWARDS
+-- ============================================================
+
+CREATE TABLE certificates (
+    certificate_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    certificate_code TEXT NOT NULL UNIQUE,
+    title           TEXT NOT NULL,
+    category        TEXT NOT NULL CHECK (category IN ('teaching', 'subject', 'milestone')),
+    tier            TEXT CHECK (tier IN ('Bronze', 'Silver', 'Gold')),
+    description     TEXT NOT NULL,
+    requirement_label TEXT NOT NULL,
+    target_value    INTEGER NOT NULL CHECK (target_value > 0)
+);
+
+CREATE TABLE tutor_certificates (
+    tutor_id        INTEGER NOT NULL REFERENCES tutors(tutor_id)
+                    ON DELETE CASCADE ON UPDATE CASCADE,
+    certificate_id INTEGER NOT NULL REFERENCES certificates(certificate_id)
+                    ON DELETE CASCADE ON UPDATE CASCADE,
+    status          TEXT NOT NULL CHECK (status IN ('earned', 'in_progress')),
+    progress_value  INTEGER NOT NULL DEFAULT 0 CHECK (progress_value >= 0),
+    earned_date     TEXT,
+    PRIMARY KEY (tutor_id, certificate_id),
+    CHECK (status != 'earned' OR earned_date IS NOT NULL),
+    CHECK (status != 'in_progress' OR earned_date IS NULL)
+);
+
 -- END OF SCHEMA
 -- ============================================================

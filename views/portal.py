@@ -15,8 +15,9 @@ from views.components import STATUS_CHIPS, person_header
 from services.pipeline import DAYS, Services, fmt12, run_pipeline, timetable
 from src.database import Database
 from src.relations import CompatibilityRelation
+from views.profile import render_profile
 
-PAGES = ["Home", "Classes", "Calendar", "Sessions", "People"]
+PAGES = ["Home", "Classes", "Calendar", "Sessions", "People", "Profile"]
 
 
 # ------------------------------------------------------------- helpers
@@ -85,6 +86,10 @@ def render_portal(user):
         else st.sidebar.radio("Mode", modes, key="mode", horizontal=True)
     )
     page = st.sidebar.radio("Go to", PAGES, key="portal_page")
+    if page == "Profile":
+        render_profile(user)
+        return
+
     st.header(page)
     st.caption(
         "Learning: find tutors for your classes."
