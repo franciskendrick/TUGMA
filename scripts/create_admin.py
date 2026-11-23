@@ -15,12 +15,9 @@ from src.database import Database
 def main():
     ensure_database()
 
-    email = input("Admin email: ").strip()
-    name = input("Display name: ").strip()
-    password = getpass.getpass("Password: ")
-
-    if password != getpass.getpass("Confirm password: "):
-        sys.exit("The passwords do not match.")
+    email = "admin@gmail.com"
+    name = "admin"
+    password = "adminpassword"
 
     db = Database(DB_PATH)
     try:
