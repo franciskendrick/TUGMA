@@ -25,7 +25,7 @@ from services.auth_service import (
 )
 from services.migrations import DB_PATH, ensure_database
 from views.auth import render_auth
-from views.components import brand, inject_css, initials
+from views.components import LOGO_PATH, brand, inject_css
 from views.portal import render_portal
 from src.database import Database
 from src.sets import SetOperations
@@ -597,7 +597,11 @@ class TUGMAApp:
 
 
 def main():
-    st.set_page_config(page_title="TUGMA", page_icon="🎓", layout="wide")
+    st.set_page_config(
+        page_title="TUGMA",
+        page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🎓",
+        layout="wide",
+    )
     inject_css()
     ensure_database()
 
@@ -621,19 +625,11 @@ def main():
     st.session_state["user"] = user
     with st.sidebar:
         brand()
-        st.markdown(f"**{user['name']}**")
-        if st.button("Log out", key="sidebar_logout"):
-            st.session_state.pop("user", None)
-            st.rerun()
-
-    if user["role"] != "admin":
-        head_left, head_right = st.columns([8, 1])
-        with head_left:
-            st.caption(f"{', '.join(user['modes'])} workspace")
-        with head_right:
-            if st.button(f"{initials(user['name'])} · Profile", key="top_right_profile", help="Open your profile"):
-                st.session_state["portal_page"] = "Profile"
-                st.rerun()
+    st.sidebar.markdown(f"**{user['name']}**  \n{', '.join(user['modes']) if user['modes'] else 'Administrator'}")
+    if st.sidebar.button("Log out"):
+        st.session_state.pop("user", None)
+        st.rerun()
+    st.sidebar.divider()
 
     if user["role"] == "admin":
         TUGMAApp().render(user["user_id"])
