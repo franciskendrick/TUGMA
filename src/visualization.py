@@ -43,48 +43,62 @@ class TUGMAVisualizer:
 
         return positions
 
+    def _figure(self, graph):
+        """Taller figures for bigger graphs so labels never overlap."""
+        rows = max(
+            sum(1 for _, d in graph.nodes(data=True) if d.get("bipartite") == 0),
+            sum(1 for _, d in graph.nodes(data=True) if d.get("bipartite") == 1),
+        )
+        return plt.subplots(figsize=(9, max(6, 0.3 * rows + 1.5)))
+
     def _draw_nodes(self, graph, positions, ax):
-        """Draw tutor and student vertices with their labels."""
+        """Draw tutors (left) and students (right) with name labels and
+        a column header over each side."""
 
-        tutors = [
-            node for node, data in graph.nodes(data=True)
-            if data.get("bipartite") == 0
-        ]
-
-        students = [
-            node for node, data in graph.nodes(data=True)
-            if data.get("bipartite") == 1
-        ]
-
-        labels = {
-            node: graph.nodes[node].get("label", str(node))
-            for node in graph.nodes()
-        }
-
-        nx.draw_networkx_nodes(
-            graph, positions,
-            nodelist=tutors,
-            ax=ax
+        sides = (
+            (0, "Tutors", "#0b6b3a", "right", -0.03),
+            (1, "Students", "#2b6cb0", "left", 0.03),
         )
-
-        nx.draw_networkx_nodes(
-            graph, positions,
-            nodelist=students,
-            ax=ax
+        rows = max(
+            sum(1 for _, d in graph.nodes(data=True) if d.get("bipartite") == side)
+            for side in (0, 1)
         )
+        fontsize = 10 if rows <= 12 else 8 if rows <= 30 else 7
 
-        nx.draw_networkx_labels(
-            graph, positions,
-            labels=labels,
-            ax=ax
-        )
+        for side, title, color, align, offset in sides:
+            nodes = [
+                node for node, data in graph.nodes(data=True)
+                if data.get("bipartite") == side
+            ]
+
+            nx.draw_networkx_nodes(
+                graph, positions, nodelist=nodes, node_color=color,
+                node_size=70, ax=ax
+            )
+
+            for node in nodes:
+                x, y = positions[node]
+                ax.text(
+                    x + offset, y,
+                    graph.nodes[node].get("label", str(node)),
+                    ha=align, va="center", fontsize=fontsize,
+                )
+
+            ax.text(
+                side, 1.0 + 0.12 * (2 / max(rows, 6)) + 0.06, title,
+                ha="center", va="bottom", fontsize=13,
+                fontweight="bold", color=color,
+            )
+
+        ax.set_xlim(-0.55, 1.55)
+        ax.set_ylim(-1.04, 1.14)
 
     def draw_before_matching(self, graph):
         """Display all valid compatibility edges."""
 
         positions = self._get_positions(graph)
 
-        fig, ax = plt.subplots(figsize=(9, 6))
+        fig, ax = self._figure(graph)
 
         self._draw_nodes(graph, positions, ax)
 
@@ -121,7 +135,7 @@ class TUGMAVisualizer:
                     "is not a compatibility edge."
                 )
 
-        fig, ax = plt.subplots(figsize=(9, 6))
+        fig, ax = self._figure(graph)
 
         self._draw_nodes(graph, positions, ax)
 

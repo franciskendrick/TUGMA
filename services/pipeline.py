@@ -89,6 +89,41 @@ class Services:
 # ----------------------------------------------------------------------
 # Pipeline: Data -> Sets -> Logic -> Relation -> Graph -> Matching
 # ----------------------------------------------------------------------
+NAME_PREFIXES = {"dela", "de", "del", "delos", "la", "san", "santa", "van", "von"}
+
+
+def _split_name(full_name):
+    """('Maria Angelica', 'Dela Cruz') from 'Maria Angelica Dela Cruz'."""
+    tokens = full_name.split()
+    if len(tokens) < 2:
+        return [full_name], ""
+    cut = len(tokens) - 1
+    while cut > 1 and tokens[cut - 1].lower() in NAME_PREFIXES:
+        cut -= 1
+    return tokens[:cut], " ".join(tokens[cut:])
+
+
+def short_names(people):
+    """{id: 'A Bautista'} for [(id, full name)]. Only people who would end
+    up with the same label get a longer one (initials, first name, then id)."""
+    levels = {}
+    for pid, full in people:
+        given, surname = _split_name(full)
+        levels[pid] = [
+            f"{given[0][0]} {surname}".strip(),
+            f"{''.join(g[0] for g in given)} {surname}".strip(),
+            f"{given[0]} {surname}".strip(),
+        ]
+    labels = {pid: lv[0] for pid, lv in levels.items()}
+    for depth in (1, 2):
+        counts = Counter(labels.values())
+        for pid in labels:
+            if counts[labels[pid]] > 1:
+                labels[pid] = levels[pid][depth]
+    counts = Counter(labels.values())
+    return {pid: (f"{l} ({pid})" if counts[l] > 1 else l) for pid, l in labels.items()}
+
+
 @st.cache_data(show_spinner="Running the TUGMA pipeline...")
 def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
     """Run the full pipeline. `db_mtime` only invalidates the cache."""
@@ -158,6 +193,13 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
         graph_builder = BipartiteGraph()
         graph = graph_builder.create_graph(tutor_ids, student_ids, relation)
         verification = graph_builder.verify_graph()
+
+        # Show people's names on the graph instead of T1, S1, ...
+        tutor_labels = short_names([(r["tutor_id"], r["name"]) for r in tutor_rows])
+        student_labels = short_names([(r["student_id"], r["name"]) for r in student_rows])
+        for node in graph.nodes:
+            labels = tutor_labels if node[0] == "tutor" else student_labels
+            graph.nodes[node]["label"] = labels.get(node[1], str(node[1]))
 
         # Tutor capacity policy
         if capacity_mode == "uniform":
@@ -287,5 +329,3 @@ def timetable(blocks, label):
 
     styler = df.style
     return (getattr(styler, "map", None) or styler.applymap)(color)
-
-
