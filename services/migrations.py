@@ -113,11 +113,79 @@ PRAGMA user_version = 3;
 COMMIT;
 """
 
-# (target_version, script). Append new migrations here.
+
+# Migration 4: data behind the profile pages (views/profile.py).
+#   * students.bio / study_notes / interests
+#   * tutor reviews with per-criterion scores, and tutor certificates
+# Written as a function so it is safe whether or not these columns or tables
+# already exist (for example if schema.sql was edited to include them).
+def _migration_4_profiles(connection):
+    existing = {row[1] for row in connection.execute("PRAGMA table_info(students)")}
+
+    connection.execute("BEGIN")
+    try:
+        for column in ("bio", "study_notes", "interests"):
+            if column not in existing:
+                connection.execute(f"ALTER TABLE students ADD COLUMN {column} TEXT")
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tutor_reviews (
+                review_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                tutor_id   INTEGER NOT NULL
+                           REFERENCES tutors(tutor_id)
+                           ON DELETE CASCADE ON UPDATE CASCADE,
+                student_id INTEGER NOT NULL
+                           REFERENCES students(student_id)
+                           ON DELETE CASCADE ON UPDATE CASCADE,
+                is_demo    INTEGER NOT NULL DEFAULT 0 CHECK (is_demo IN (0, 1)),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tutor_review_scores (
+                review_id INTEGER NOT NULL
+                          REFERENCES tutor_reviews(review_id)
+                          ON DELETE CASCADE ON UPDATE CASCADE,
+                criterion TEXT NOT NULL,
+                score     INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+                PRIMARY KEY (review_id, criterion)
+            )""")
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS certificates (
+                certificate_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                certificate_code  TEXT NOT NULL UNIQUE,
+                title             TEXT NOT NULL,
+                category          TEXT NOT NULL,
+                tier              TEXT CHECK (tier IN ('Gold', 'Silver', 'Bronze')),
+                description       TEXT NOT NULL,
+                requirement_label TEXT NOT NULL,
+                target_value      INTEGER NOT NULL CHECK (target_value > 0)
+            )""")
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tutor_certificates (
+                tutor_id       INTEGER NOT NULL
+                               REFERENCES tutors(tutor_id)
+                               ON DELETE CASCADE ON UPDATE CASCADE,
+                certificate_id INTEGER NOT NULL
+                               REFERENCES certificates(certificate_id)
+                               ON DELETE CASCADE ON UPDATE CASCADE,
+                status         TEXT NOT NULL DEFAULT 'in_progress'
+                               CHECK (status IN ('earned', 'in_progress')),
+                progress_value INTEGER NOT NULL DEFAULT 0 CHECK (progress_value >= 0),
+                earned_date    TEXT,
+                PRIMARY KEY (tutor_id, certificate_id)
+            )""")
+        connection.execute("PRAGMA user_version = 4")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+# (target_version, script or function). Append new migrations here.
 MIGRATIONS = [
     (1, MIGRATION_1_USERS),
     (2, MIGRATION_2_DUAL_ROLE),
     (3, MIGRATION_3_SESSIONS),
+    (4, _migration_4_profiles),
 ]
 
 
@@ -128,7 +196,10 @@ def migrate(db):
 
     for target, script in MIGRATIONS:
         if target > version:
-            connection.executescript(script)
+            if callable(script):
+                script(connection)
+            else:
+                connection.executescript(script)
             version = target
 
     return version

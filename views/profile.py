@@ -86,10 +86,28 @@ def _render_student_profile(user):
     with about:
         st.subheader("About")
         st.write(profile.get("bio") or "This student has not added a biography yet.")
+
+        st.subheader("Hobbies and interests")
+        interests_raw = profile.get("interests") or ""
+        interests = [i.strip() for i in interests_raw.split(",") if i.strip()]
+        if interests:
+            st.write(" · ".join(interests))
+        else:
+            st.caption("No interests have been added yet.")
+
+        st.subheader("How I study")
+        how_left, how_right = st.columns([1, 2])
+        with how_left:
+            st.caption("Learning style")
+            st.caption("Preferred setup")
+            st.caption("Free time")
+        with how_right:
+            st.write(profile.get("learning_style") or "Not specified")
+            st.write(profile.get("preferred_setup") or "Not specified")
+            st.write(profile.get("free_time") or "Not specified")
+
         st.subheader("Study notes")
         st.write(profile.get("study_notes") or "No study preferences or learning notes have been added yet.")
-        st.subheader("Interests")
-        st.write(profile.get("interests") or "No interests have been added yet.")
 
     with info:
         st.subheader("Academic information")

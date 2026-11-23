@@ -131,6 +131,7 @@ class Database:
             """,
             (tutor_id,),
         )
+
     # ----------------------------------------------------- student profile data
     def get_student_profile(self, student_id):
         """Fetch student details and the linked account metadata, if available."""
@@ -138,6 +139,7 @@ class Database:
             """
             SELECT s.student_id, s.name, s.grade_level, s.course,
                    s.bio, s.study_notes, s.interests,
+                   s.learning_style, s.preferred_setup, s.free_time,
                    u.email, u.created_at, u.is_active
             FROM students s
             LEFT JOIN users u ON u.student_id = s.student_id
@@ -183,4 +185,3 @@ class Database:
             """,
             (student_id,),
         )
-

@@ -17,10 +17,16 @@ PRAGMA foreign_keys = ON;
 -- ============================================================
 
 CREATE TABLE students (
-    student_id  INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    grade_level INTEGER NOT NULL CHECK (grade_level > 0),
-    course      TEXT NOT NULL
+    student_id      INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    grade_level     INTEGER NOT NULL CHECK (grade_level > 0),
+    course          TEXT NOT NULL,
+    bio             TEXT,
+    study_notes     TEXT,
+    interests       TEXT,
+    learning_style  TEXT,
+    preferred_setup TEXT,
+    free_time       TEXT
 );
 
 
@@ -207,9 +213,6 @@ CREATE TABLE tutor_availability (
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
-
-
--- ============================================================
 
 
 -- ============================================================
