@@ -80,15 +80,20 @@ def render_portal(user):
         st.error("This account has no student or tutor profile.")
         return
 
+    page = st.sidebar.radio("Go to", PAGES, key="portal_page")
+    if page == "Profile":
+        mode = (
+            modes[0]
+            if len(modes) == 1
+            else st.radio("Mode", modes, key="mode", horizontal=True)
+        )
+        render_profile(user, mode)
+        return
     mode = (
         modes[0]
         if len(modes) == 1
         else st.sidebar.radio("Mode", modes, key="mode", horizontal=True)
     )
-    page = st.sidebar.radio("Go to", PAGES, key="portal_page")
-    if page == "Profile":
-        render_profile(user, mode)
-        return
 
     st.header(page)
     st.caption(

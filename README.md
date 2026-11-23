@@ -72,6 +72,12 @@ erDiagram
         TEXT name
         INTEGER grade_level
         TEXT course
+        TEXT bio
+        TEXT study_notes
+        TEXT interests
+        TEXT learning_style
+        TEXT preferred_setup
+        TEXT free_time
     }
 
     SUBJECTS {
@@ -86,6 +92,18 @@ erDiagram
         INTEGER grade_level
         TEXT course
         INTEGER verified
+        INTEGER capacity
+    }
+
+    CERTIFICATES {
+        INTEGER certificate_id PK
+        TEXT certificate_code UK
+        TEXT title
+        TEXT category
+        TEXT tier
+        TEXT description
+        TEXT requirement_label
+        INTEGER target_value
     }
 
     %% Student-Side Tables
@@ -102,10 +120,10 @@ erDiagram
     STUDENT_SCHEDULE {
         INTEGER schedule_id PK
         INTEGER student_id FK
-        INTEGER subject_id FK
         TEXT day
         TEXT start_time
         TEXT end_time
+        INTEGER subject_id FK
     }
 
     %% Tutor-Side Tables
@@ -127,26 +145,50 @@ erDiagram
         TEXT end_time
     }
 
+    TUTOR_REVIEWS {
+        INTEGER review_id PK
+        INTEGER tutor_id FK
+        INTEGER student_id FK
+        TEXT session_reference
+        TEXT review_date
+        INTEGER is_demo
+    }
+
+    TUTOR_REVIEW_SCORES {
+        INTEGER review_id PK, FK
+        TEXT criterion PK
+        INTEGER score
+    }
+
+    TUTOR_CERTIFICATES {
+        INTEGER tutor_id PK, FK
+        INTEGER certificate_id PK, FK
+        TEXT status
+        INTEGER progress_value
+        TEXT earned_date
+    }
+
     %% --- RELATIONSHIPS ---
 
-    %% 1. Pure Student Outer Node
+    %% 1. Student Tables
     STUDENTS ||--o{ STUDENT_LANGUAGES : "speaks"
-
-    %% 2. Student-Subject Junctions (Vertical Flow)
     STUDENTS ||--o{ STUDENT_SUBJECTS : "requests"
     STUDENT_SUBJECTS }o--|| SUBJECTS : "needed by"
-
-    %% 3. Student Schedule Mapping (Rerouted through Schedule)
     STUDENTS ||--o{ STUDENT_SCHEDULE : "has class"
     STUDENT_SCHEDULE }o--|| SUBJECTS : "scheduled for"
+    STUDENTS ||--o{ TUTOR_REVIEWS : "submits"
 
-    %% 4. Tutor-Subject Junctions
+    %% 2. Tutor Tables
+    TUTORS ||--o{ TUTOR_LANGUAGES : "speaks"
     TUTORS ||--o{ TUTOR_SUBJECTS : "teaches"
     TUTOR_SUBJECTS }o--|| SUBJECTS : "taught by"
-
-    %% 5. Pure Tutor Outer Node
-    TUTORS ||--o{ TUTOR_LANGUAGES : "speaks"
     TUTORS ||--o{ TUTOR_AVAILABILITY : "available at"
+    TUTORS ||--o{ TUTOR_REVIEWS : "receives"
+    TUTORS ||--o{ TUTOR_CERTIFICATES : "tracks"
+
+    %% 3. Review Scores and Certificates
+    TUTOR_REVIEWS ||--o{ TUTOR_REVIEW_SCORES : "graded by"
+    CERTIFICATES ||--o{ TUTOR_CERTIFICATES : "defines"
 ```
 
 ## Testing

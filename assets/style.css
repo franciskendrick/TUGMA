@@ -1,33 +1,295 @@
-/* TUGMA look and feel. Only touches the components defined in
-   views/components.py plus metric cards; colours come from
-   .streamlit/config.toml. */
+/* ============================================================
+   Profile page — card-based layout matching the design refs
+   ============================================================ */
 
-.tg-brand { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
-.tg-logo { width:38px; height:38px; border-radius:10px; background:#0b6b3a;
-           color:#fff; font-weight:800; display:flex; align-items:center;
-           justify-content:center; flex:none; }
-.tg-brand-name { font-weight:800; letter-spacing:.06em; font-size:1.15rem; line-height:1.1; }
-.tg-brand-sub { font-size:.72rem; opacity:.75; }
-.tg-logo-img { width:38px; height:38px; border-radius:10px; object-fit:contain; flex:none; }
-.tg-brand-big .tg-logo-img { width:52px; height:52px; }
-.tg-brand-big .tg-logo { width:52px; height:52px; font-size:1.3rem; }
-.tg-brand-big .tg-brand-name { font-size:1.7rem; }
+:root {
+  --tg-green:        #0b6b3a;
+  --tg-green-deep:   #064e2b;
+  --tg-green-tint:   #e6f3ec;
+  --tg-green-line:   #cfe3d7;
+  --tg-ink:          #1c2b22;
+  --tg-ink-soft:     #55665c;
+  --tg-muted:        #8a978f;
+  --tg-card:         #ffffff;
+  --tg-card-line:    #e2eae5;
+  --tg-radius:       16px;
+  --tg-radius-sm:    10px;
+}
 
-.tg-person { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
-.tg-avatar { width:42px; height:42px; border-radius:50%; background:#cfe8da;
-             color:#064e2b; font-weight:700; display:flex; align-items:center;
-             justify-content:center; flex:none; }
-.tg-person-text { flex:1; min-width:0; }
-.tg-name { font-weight:700; font-size:1.02rem; }
-.tg-sub { font-size:.82rem; opacity:.7; }
+/* ----- Hero -------------------------------------------------- */
+.tg-profile-hero-wrap {
+  border-radius: var(--tg-radius);
+  overflow: hidden;
+  background: var(--tg-card);
+  border: 1px solid var(--tg-card-line);
+  margin-bottom: 18px;
+}
+.tg-profile-hero-banner {
+  position: relative;
+  height: 120px;
+  background: linear-gradient(135deg, #0b6b3a 0%, #085630 100%);
+}
+.tg-hero-role {
+  position: absolute;
+  top: 16px; right: 18px;
+  background: rgba(0,0,0,.28);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+.tg-profile-hero-body {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 0 24px 20px;
+}
+.tg-profile-avatar-lg {
+  width: 124px; height: 124px;
+  border-radius: 50%;
+  background: #eef7f1;
+  color: var(--tg-green-deep);
+  font-weight: 800;
+  font-size: 2.4rem;
+  display: flex; align-items: center; justify-content: center;
+  flex: none;
+  border: 6px solid #fff;
+  margin-top: -62px;
+  box-shadow: 0 2px 10px rgba(11,107,58,.10);
+}
+.tg-profile-hero-info { flex: 1; min-width: 0; padding-top: 6px; }
+.tg-profile-hero-name {
+  margin: 0;
+  font-size: 1.65rem;
+  letter-spacing: .02em;
+  color: var(--tg-ink);
+}
+.tg-profile-hero-sub { margin: 2px 0 8px; color: var(--tg-ink-soft); }
+.tg-hero-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+}
+.tg-hero-chip-ok { background: var(--tg-green-tint); color: var(--tg-green-deep); }
+.tg-hero-action { padding-bottom: 6px; }
 
-.tg-chip { display:inline-block; padding:2px 10px; border-radius:999px;
-           font-size:.75rem; font-weight:600; white-space:nowrap; }
-.tg-ok { background:#dcf2e6; color:#0b5d31; }
-.tg-warn { background:#fdf0c9; color:#7a5200; }
-.tg-bad { background:#fde2e2; color:#8a1c1c; }
-.tg-neutral { background:#e8eeea; color:#33443a; }
+/* ----- Segmented tabs --------------------------------------- */
+/* ============================================================
+   Clickable segmented tab pills (st.button-backed)
+   ============================================================ */
 
-[data-testid="stMetric"] { background:#ffffff; border:1px solid rgba(11,107,58,.15);
-                           border-radius:14px; padding:12px 16px; }
-[data-testid="stVerticalBlockBorderWrapper"] { border-radius:14px; }
+.tg-tab-btn {
+  margin-bottom: 4px;
+}
+.tg-tab-btn .stButton > button {
+  width: 100%;
+  background: #fff;
+  color: var(--tg-ink-soft);
+  border: 1px solid var(--tg-card-line);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: .88rem;
+  padding: 7px 16px;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tg-tab-btn .stButton > button:hover {
+  border-color: var(--tg-green);
+  color: var(--tg-green);
+  background: var(--tg-green-tint);
+}
+.tg-tab-btn-active .stButton > button {
+  background: var(--tg-green) !important;
+  color: #fff !important;
+  border-color: var(--tg-green) !important;
+}
+.tg-tab-btn-active .stButton > button:hover {
+  background: var(--tg-green-deep) !important;
+  color: #fff !important;
+  border-color: var(--tg-green-deep) !important;
+}
+
+/* ----- Cards ------------------------------------------------- */
+.tg-card {
+  background: var(--tg-card);
+  border: 1px solid var(--tg-card-line);
+  border-radius: var(--tg-radius);
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+.tg-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.tg-card-head h3 { margin: 0; font-size: 1.05rem; color: var(--tg-ink); }
+.tg-link-edit {
+  background: none;
+  border: none;
+  color: var(--tg-green);
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tg-body-text { margin: 0; color: var(--tg-ink-soft); line-height: 1.5; }
+.tg-muted { color: var(--tg-muted); font-size: .85rem; }
+
+/* ----- Tags -------------------------------------------------- */
+.tg-tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.tg-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--tg-card-line);
+  border-radius: 999px;
+  font-size: .85rem;
+  color: var(--tg-ink);
+  background: #fff;
+}
+.tg-tag-x { color: var(--tg-muted); font-size: .85rem; }
+.tg-add-row { display: flex; gap: 8px; }
+.tg-input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--tg-card-line);
+  border-radius: 999px;
+  font-size: .88rem;
+  outline: none;
+}
+.tg-input:focus { border-color: var(--tg-green); }
+
+/* ----- Buttons ---------------------------------------------- */
+.tg-btn {
+  border: none;
+  padding: 8px 18px;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tg-btn-pill { border-radius: 999px; }
+.tg-btn-primary { background: var(--tg-green); color: #fff; }
+.tg-btn-outline {
+  background: #fff;
+  color: var(--tg-green);
+  border: 1px solid var(--tg-green-line);
+}
+.tg-btn-block { width: 100%; margin-top: 12px; }
+
+/* ----- Key/value rows (How I study) ------------------------- */
+.tg-kv-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  padding: 8px 0;
+  border-bottom: 1px dashed #eef2ef;
+}
+.tg-kv-row:last-child { border-bottom: none; }
+.tg-kv-key { color: var(--tg-ink-soft); font-size: .88rem; }
+.tg-kv-val { color: var(--tg-ink); font-size: .92rem; font-weight: 500; }
+
+/* ----- Side cards (Account / Trust Signals) ---------------- */
+.tg-side-card {
+  background: var(--tg-card);
+  border: 1px solid var(--tg-card-line);
+  border-radius: var(--tg-radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.tg-side-card-head {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; color: var(--tg-ink);
+  margin-bottom: 12px;
+  font-size: 1rem;
+}
+.tg-side-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  color: var(--tg-ink-soft);
+  font-size: .88rem;
+}
+.tg-side-ico { color: var(--tg-green); }
+.tg-side-label { color: var(--tg-muted); margin-right: 6px; }
+.tg-side-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .8rem;
+  color: var(--tg-ink);
+}
+
+/* ----- Rating ----------------------------------------------- */
+.tg-rating-overall {
+  font-size: 2.6rem; font-weight: 800; color: var(--tg-ink); line-height: 1;
+}
+.tg-rating-stars { color: #e6a700; font-size: 1.1rem; letter-spacing: 2px; margin: 4px 0 6px; }
+.tg-rating-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 42px;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0;
+  font-size: .88rem;
+}
+.tg-rating-label { color: var(--tg-ink); }
+.tg-rating-bar {
+  height: 8px; background: #e9efe9; border-radius: 999px; overflow: hidden;
+}
+.tg-rating-bar > span {
+  display: block; height: 100%; background: var(--tg-green); border-radius: 999px;
+}
+.tg-rating-score { text-align: right; color: var(--tg-ink-soft); font-weight: 600; }
+
+/* ----- Certificates ----------------------------------------- */
+.tg-cert-section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 6px 0 8px;
+}
+.tg-cert-section-head h3 { margin: 0; color: var(--tg-ink); }
+.tg-cert-count { color: var(--tg-muted); font-size: .85rem; }
+.tg-tier-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tg-tier-pill {
+  padding: 3px 10px; border-radius: 999px; font-size: .75rem; font-weight: 600;
+}
+.tg-tier-bronze { background: #fbecd3; color: #8a5a17; }
+.tg-tier-silver { background: #e7edf3; color: #3d5568; }
+.tg-tier-gold   { background: #fbf0d0; color: #7a5b0b; }
+
+.tg-cert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.tg-cert-card {
+  background: var(--tg-card);
+  border: 1px solid var(--tg-card-line);
+  border-radius: var(--tg-radius);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.tg-cert-head { display: flex; gap: 10px; align-items: flex-start; }
+.tg-medal {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; flex: none;
+}
+.tg-medal-gold   { background: #fbf0d0; color: #7a5b0b; }
+.tg-medal-silver { background: #e7edf3; color: #3d5568; }
+.tg-medal-bronze { background: #fbecd3; color: #8a5a17; }
+.tg-medal-muted  { background: #eef2ef; color: var(--tg-muted); }
+.tg-cert-title { font-weight: 700; color: var(--tg-ink); font-size: .95rem; }
+.tg-cert-tier { font-size: .78rem; color: var(--tg-muted); }
+.tg-cert-desc { color: var(--tg-ink-soft); font-size: .85rem; line-height: 1.45; }
+.tg-cert-footer { margin-top: auto; }
+.tg-cert-earned { color: var(--tg-green); font-size: .82rem; font-weight: 600; }
+.tg-check { margin-right: 4px; }
+.tg-cert-req { font-size: .78rem; color: var(--tg-muted); margin-bottom: 6px; }
+.tg-cert-bar {
+  height: 6px; background: #eef2ef; border-radius: 999px; overflow: hidden;
+}
+.tg-cert-bar > span {
+  display: block; height: 100%; background: var(--tg-green); border-radius: 999px;
+}
+.tg-cert-progress { font-size: .78rem; color: var(--tg-ink-soft); margin-top: 6px; }
