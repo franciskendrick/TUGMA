@@ -210,3 +210,13 @@ def test_create_account_for_seed_profile(db):
         auth.create_account_for_profile(db, "other@tugma.demo", "demo-password", student_id=1)
     with pytest.raises(AuthError, match="does not exist"):
         auth.create_account_for_profile(db, "x@tugma.demo", "demo-password", tutor_id=99)
+
+
+def test_ensure_database_rebuilds_an_empty_file(tmp_path):
+    from services.migrations import ensure_database
+    path = tmp_path / "empty.db"
+    path.touch()  # zero-byte file, e.g. created by a stray connection
+    assert ensure_database(path) == 3
+    d = Database(path)
+    assert d.fetch_one("SELECT COUNT(*) n FROM students")["n"] == 7
+    d.close()

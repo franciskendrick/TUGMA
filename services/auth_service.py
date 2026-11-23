@@ -246,8 +246,11 @@ def set_account_active(db, admin_user_id, target_user_id, active):
         raise AuthError("That account does not exist.")
 
 
-def create_account_for_profile(db, email, password, student_id=None, tutor_id=None):
-    """Give an EXISTING student and/or tutor profile a login (setup scripts)."""
+def create_account_for_profile(db, email, password, student_id=None, tutor_id=None,
+                               password_hash=None):
+    """Give an EXISTING student and/or tutor profile a login (setup scripts).
+
+    password_hash may be passed to reuse one bcrypt hash for many accounts."""
     email = normalize_email(email)
     _validate_email(email)
     _validate_password(password, password)
@@ -267,7 +270,7 @@ def create_account_for_profile(db, email, password, student_id=None, tutor_id=No
         cursor = db.execute(
             "INSERT INTO users (email, password_hash, role, student_id, tutor_id) "
             "VALUES (?, ?, 'member', ?, ?)",
-            (email, hash_password(password), student_id, tutor_id),
+            (email, password_hash or hash_password(password), student_id, tutor_id),
         )
     except sqlite3.IntegrityError as error:
         raise AuthError(
