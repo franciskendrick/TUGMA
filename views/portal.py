@@ -2,7 +2,7 @@
 # Accounts with both profiles can switch modes; others see only their own.
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -377,7 +377,16 @@ def page_calendar(user, mode):
         if mode == "Tutoring":
             blocks += [{**a, "text": "Available"}
                        for a in svc.schedules.get_tutor_available_slots(user["tutor_id"])]
-        sessions = sess.list_sessions(svc.db, uid, mode)
+        # Booked (confirmed) and requested (pending) sessions in every role
+        # this account has: a busy hour is busy whichever role it is for.
+        booked = []
+        for role in user["modes"]:
+            tabs = sess.list_sessions(svc.db, uid, role)
+            for ended, rows in ((False, tabs["upcoming"] + tabs["reply"] + tabs["sent"]),
+                                (True, [r for r in tabs["past"] if r["status"] == "confirmed"])):
+                for r in rows:
+                    booked.append({**r, "role": role, "ended": ended,
+                                   "other": r["student_name"] if role == "Tutoring" else r["tutor_name"]})
         classes = svc.db.fetch_all(
             "SELECT ss.schedule_id, ss.day, ss.start_time, ss.end_time, s.subject_code "
             "FROM student_schedule ss JOIN subjects s ON s.subject_id = ss.subject_id "
@@ -391,16 +400,52 @@ def page_calendar(user, mode):
     finally:
         svc.close()
 
-    this_week = datetime.now().date().isocalendar()[:2]
-    for row in sessions["upcoming"] + sessions["sent"] + sessions["reply"]:
-        d = datetime.strptime(row["session_date"], "%Y-%m-%d")
-        if d.date().isocalendar()[:2] == this_week and d.weekday() < 6:
-            blocks.append({"day": DAYS[d.weekday()], "start_time": row["start_time"],
-                           "end_time": row["end_time"], "text": "Session"})
+    # ---- week navigation (classes and free time repeat; sessions are dated)
+    today = datetime.now().date()
+    offset = st.session_state.setdefault("cal_week", 0)
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=offset)
+    saturday = monday + timedelta(days=5)
 
-    st.caption("Red: classes. Green: " + ("free time." if mode == "Learning"
-               else "when you can tutor.") + " Blue: sessions this week.")
-    st.dataframe(timetable(blocks, "Free"))
+    nav = st.columns([1, 1, 1, 4])
+    if nav[0].button("◀ Previous", key="cal_prev"):
+        st.session_state["cal_week"] -= 1
+        st.rerun()
+    if nav[1].button("This week", key="cal_now"):
+        st.session_state["cal_week"] = 0
+        st.rerun()
+    if nav[2].button("Next ▶", key="cal_next"):
+        st.session_state["cal_week"] += 1
+        st.rerun()
+    nav[3].markdown(f"**{monday:%b} {monday.day} – {saturday:%b} {saturday.day}, {saturday.year}**")
+
+    for r in booked:
+        day = datetime.strptime(r["session_date"], "%Y-%m-%d").date()
+        if monday <= day <= saturday:
+            label = "Session" if r["status"] == "confirmed" else "Pending"
+            blocks.append({"day": DAYS[day.weekday()], "start_time": r["start_time"],
+                           "end_time": r["end_time"],
+                           "text": f"{label} · {r['other'].split()[0]}"})
+
+    st.caption("Red: classes. Green: " + ("free time" if mode == "Learning"
+               else "when you can tutor") + ". Blue: booked sessions. Amber: requests "
+               "waiting for an answer. Classes and free time repeat every week.")
+    headers = {DAYS[i]: f"{DAYS[i][:3]} {(monday + timedelta(days=i)).day}" for i in range(6)}
+    st.dataframe(timetable(blocks, "Free", headers), height=35 * 21 + 3)
+
+    st.subheader("My booked sessions")
+    upcoming = sorted((r for r in booked if not r["ended"]),
+                      key=lambda r: (r["session_date"], r["start_time"]))
+    if upcoming:
+        st.dataframe(
+            pd.DataFrame([{
+                "When": when(r), "With": r["other"],
+                "Subject": r["subject_name"].title(), "As": r["role"],
+                "Status": "Confirmed" if r["status"] == "confirmed" else "Waiting for reply",
+            } for r in upcoming]),
+            hide_index=True,
+        )
+    else:
+        st.info("No booked or requested sessions yet. Request one from the Classes page.")
 
     if user["student_id"] is not None and mode == "Learning":
         st.subheader("My classes")

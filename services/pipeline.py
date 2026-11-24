@@ -292,15 +292,28 @@ def to_minutes(value):
     return value.hour * 60 + value.minute
 
 
-def timetable(blocks, label):
-    """Weekly grid (30-minute rows, Mon–Sat) as a styled table.
+def _block_priority(text):
+    """When blocks overlap, the most specific one is drawn: a booked session
+    beats a class, and a class beats plain free time."""
+    if text.startswith("Session"):
+        return 10
+    if text.startswith("Pending"):
+        return 9
+    if text in ("Free", "Available"):
+        return 1
+    return 5  # a class (subject code)
+
+
+def timetable(blocks, label, column_labels=None):
+    """Weekly grid (30-minute rows, Mon-Sat) as a styled table.
 
     blocks: dicts with day, start_time, end_time and optional 'text'.
+    column_labels: optional {day name: header text}, e.g. {"Monday": "Mon 30"}.
     """
     rows = range(7 * 60, 17 * 60, 30)
     grid = {
         day: [
-            next(
+            max(
                 (
                     b.get("text", label)
                     for b in blocks
@@ -308,7 +321,8 @@ def timetable(blocks, label):
                     and to_minutes(b["start_time"]) < start + 30
                     and to_minutes(b["end_time"]) > start
                 ),
-                "",
+                key=_block_priority,
+                default="",
             )
             for start in rows
         ]
@@ -317,12 +331,16 @@ def timetable(blocks, label):
     df = pd.DataFrame(
         grid, index=[fmt12(f"{m // 60}:{m % 60:02d}") for m in rows]
     )
+    if column_labels:
+        df = df.rename(columns=column_labels)
 
     def color(cell):
         if not cell:
             return ""
-        if cell == "Session":
+        if cell.startswith("Session"):
             return "background-color: #dbeafe; color: #1e3a8a"
+        if cell.startswith("Pending"):
+            return "background-color: #fef3c7; color: #78350f"
         if cell in ("Free", "Available"):
             return "background-color: #d9f2e3; color: #14532d"
         return "background-color: #fde2e2; color: #7f1d1d"
