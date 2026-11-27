@@ -29,6 +29,15 @@
 </div>
 
 <h2 class="section-title">The bipartite graph, before and after</h2>
+<form method="post" action="{{ url_for('admin_toggle_multi_subject') }}" class="card" style="padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+  <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600; color:var(--ink); font-size:13.5px; margin:0;">
+    <input type="checkbox" name="multi_subject" value="1" onchange="this.form.submit()" {{ 'checked' if multi_subject else '' }} style="width:16px; height:16px; accent-color:var(--primary);">
+    <span>Account for students with multiple needed subjects (split into <code>Student (Subject)</code> pairs, max 1 tutor per subject)</span>
+  </label>
+  <span class="pill {{ 'pill-green' if multi_subject else 'pill-muted' }}" style="white-space:nowrap;">
+    {{ '1 tutor per subject' if multi_subject else '1 tutor per student' }}
+  </span>
+</form>
 <div class="cards-grid-2">
   <div class="card">
     <div style="font-weight:800; color:var(--ink); margin-bottom:10px;">Every compatible pair (Compatibility Graph)</div>

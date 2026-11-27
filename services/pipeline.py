@@ -125,7 +125,7 @@ def short_names(people):
 
 
 @lru_cache(maxsize=8)
-def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
+def run_pipeline(db_mtime, capacity_mode, uniform_capacity, multi_subject=False):
     """Run the full pipeline. `db_mtime` only invalidates the cache."""
     svc = Services()
 
@@ -190,15 +190,46 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
 
         # Relation R = {(t, s) | Compatible(t, s)}
         relation = builder.construct_relation()
+        relation_set = set(relation)
 
-        # Graph G = (T u S, E)
+        # Graph G = (T u S, E) — or (T u (S x Subject), E) when multi_subject=True
+        base_student_labels = short_names([(r["student_id"], r["name"]) for r in student_rows])
+        tutor_labels = short_names([(r["tutor_id"], r["name"]) for r in tutor_rows])
+
+        if multi_subject:
+            right_ids = [
+                (s, subj)
+                for s in student_ids
+                for subj in sorted(svc.sets.get_student_needs(s))
+            ]
+            graph_relation = []
+            for s, subj in right_ids:
+                s_free = svc.schedules.get_student_free_slots(s)
+                for t in tutor_ids:
+                    if (t, s) not in relation_set:
+                        continue
+                    if subj not in svc.sets.get_tutor_subjects(t):
+                        continue
+                    t_slots = [
+                        sl for sl in svc.schedules.get_tutor_available_slots(t)
+                        if sl.get("subject_code") in (None, subj)
+                    ]
+                    if svc.sets.availability_intersection(s_free, t_slots):
+                        graph_relation.append((t, (s, subj)))
+            student_labels = {
+                (s, subj): f"{base_student_labels.get(s, str(s))} ({subj})"
+                for (s, subj) in right_ids
+            }
+        else:
+            right_ids = student_ids
+            graph_relation = relation
+            student_labels = base_student_labels
+
         graph_builder = BipartiteGraph()
-        graph = graph_builder.create_graph(tutor_ids, student_ids, relation)
+        graph = graph_builder.create_graph(tutor_ids, right_ids, graph_relation)
         verification = graph_builder.verify_graph()
 
         # Show people's names on the graph instead of T1, S1, ...
-        tutor_labels = short_names([(r["tutor_id"], r["name"]) for r in tutor_rows])
-        student_labels = short_names([(r["student_id"], r["name"]) for r in student_rows])
         for node in graph.nodes:
             labels = tutor_labels if node[0] == "tutor" else student_labels
             graph.nodes[node]["label"] = labels.get(node[1], str(node[1]))
@@ -209,36 +240,56 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
         else:
             capacities = {r["tutor_id"]: r["capacity"] for r in tutor_rows}
 
-        # Capacity-constrained matching
-        if tutor_ids and student_ids:
+        # Capacity-constrained matching (each right-side node has capacity 1)
+        if tutor_ids and right_ids:
             matcher = CapacityMatcher(graph, capacities)
             pairs = matcher.find_matching()
             unmatched_ids = matcher.get_unmatched_students()
             remaining = matcher.get_remaining_capacity()
         else:
-            pairs, unmatched_ids = [], list(student_ids)
+            pairs, unmatched_ids = [], list(right_ids)
             remaining = dict(capacities)
 
         # Presentation details for each selected edge
         matches = []
-        for t, s in sorted(pairs, key=lambda p: (p[1], p[0])):
-            shared = svc.sets.subject_intersection(
-                svc.sets.get_tutor_subjects(t),
-                svc.sets.get_student_needs(s),
-            )
+        for t, right_node in sorted(pairs, key=lambda p: (p[1], p[0])):
+            if multi_subject:
+                s, subj = right_node
+                shared = {subj}
+                t_slots = [
+                    sl for sl in svc.schedules.get_tutor_available_slots(t)
+                    if sl.get("subject_code") in (None, subj)
+                ]
+            else:
+                s = right_node
+                subj = None
+                shared = svc.sets.subject_intersection(
+                    svc.sets.get_tutor_subjects(t),
+                    svc.sets.get_student_needs(s),
+                )
+                t_slots = svc.schedules.get_tutor_available_slots(t)
             slots = svc.sets.availability_intersection(
                 svc.schedules.get_student_free_slots(s),
-                svc.schedules.get_tutor_available_slots(t),
+                t_slots,
             )
             matches.append(
-                {"student_id": s, "tutor_id": t,
-                 "shared": sorted(shared), "slots": slots}
+                {
+                    "student_id": s,
+                    "tutor_id": t,
+                    "subject_code": subj,
+                    "shared": sorted(shared),
+                    "slots": slots,
+                }
             )
 
-        compatible_count = Counter(s for _, s in relation)
+        compatible_count = Counter(r_id for _, r_id in graph_relation)
         unmatched = [
-            {"student_id": s, "has_compatible": compatible_count[s] > 0}
-            for s in unmatched_ids
+            {
+                "student_id": r_id[0] if multi_subject else r_id,
+                "subject_code": r_id[1] if multi_subject else None,
+                "has_compatible": compatible_count[r_id] > 0,
+            }
+            for r_id in unmatched_ids
         ]
         subject_names = {
             r["subject_code"]: r["subject_name"].title()
@@ -257,6 +308,9 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
             "graph": graph,
             "verification": verification,
             "capacities": capacities,
+            "multi_subject": multi_subject,
+            "right_ids": right_ids,
+            "graph_relation": graph_relation,
             "pairs": pairs,
             "matches": matches,
             "unmatched": unmatched,

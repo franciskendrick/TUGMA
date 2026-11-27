@@ -126,11 +126,31 @@ def active_mode(user):
     return mode
 
 
+def get_multi_subject_mode():
+    db = get_db()
+    db.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    row = db.fetch_one("SELECT value FROM app_settings WHERE key = 'multi_subject'")
+    if row is None:
+        return True
+    return bool(row["value"] == "1")
+
+
+def set_multi_subject_mode(enabled):
+    db = get_db()
+    db.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    db.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('multi_subject', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        ("1" if enabled else "0",),
+    )
+
+
 def get_pipeline_data():
     cap_mode = session.get("cap_mode", "stored")
     cap_uniform = int(session.get("cap_uniform", 1))
+    multi_subject = get_multi_subject_mode()
     mtime = DB_PATH.stat().st_mtime_ns if DB_PATH.exists() else 0
-    return run_pipeline(mtime, cap_mode, cap_uniform)
+    return run_pipeline(mtime, cap_mode, cap_uniform, multi_subject=multi_subject)
 
 
 @app.context_processor
@@ -406,7 +426,12 @@ def _evaluate_student_tutors(db, sid, subject_code, data):
             "WHERE t.verified = 1 "
             "GROUP BY t.tutor_id ORDER BY t.tutor_id"
         )
-        pipeline_match = next((m for m in data["matches"] if m["student_id"] == sid), None)
+        recommended_tids = {
+            m["tutor_id"]
+            for m in data["matches"]
+            if m["student_id"] == sid
+            and (not data.get("multi_subject") or not subject_code or m.get("subject_code") == subject_code)
+        }
         full_matches = []
         almost_matches = []
 
@@ -422,7 +447,10 @@ def _evaluate_student_tutors(db, sid, subject_code, data):
                 subj_ok = ev["subject_match"]
 
             slots = common_slots(db, tid, sid, subject_code=subject_code) if ev["time_match"] else []
-            rules_met = sum([subj_ok, ev["time_match"], ev["language_match"], True])
+            remaining_spots = data["remaining"].get(tid, t["capacity"])
+            cap_ok = remaining_spots > 0
+            rules_met = sum([subj_ok, ev["time_match"], ev["language_match"], cap_ok])
+            avg_rating = float(t["avg_rating"] or 0)
 
             t_langs = sorted(svc.sets.get_tutor_languages(tid))
             card = {
@@ -443,15 +471,22 @@ def _evaluate_student_tutors(db, sid, subject_code, data):
                 "subj_ok": subj_ok,
                 "time_ok": ev["time_match"],
                 "lang_ok": ev["language_match"],
-                "cap_ok": data["remaining"].get(tid, t["capacity"]) > 0,
-                "remaining_spots": data["remaining"].get(tid, t["capacity"]),
-                "is_suggested": pipeline_match and pipeline_match["tutor_id"] == tid,
+                "cap_ok": cap_ok,
+                "remaining_spots": remaining_spots,
+                "avg_rating": avg_rating,
+                "is_suggested": tid in recommended_tids,
                 "rules_met": rules_met,
             }
-            if subj_ok and ev["time_match"] and ev["language_match"]:
+            if subj_ok and ev["time_match"] and ev["language_match"] and cap_ok:
                 full_matches.append(card)
             elif rules_met >= 2:
                 almost_matches.append(card)
+        full_matches.sort(
+            key=lambda c: (not c["is_suggested"], -c["avg_rating"], -c["remaining_spots"])
+        )
+        almost_matches.sort(
+            key=lambda c: (not c["subj_ok"], not c["time_ok"], not c["lang_ok"], not c["cap_ok"], -c["avg_rating"])
+        )
         return full_matches, almost_matches
     finally:
         svc.close()
@@ -1220,38 +1255,59 @@ def admin_settings():
     )
 
 
+@app.route("/admin/toggle-multi-subject", methods=["POST"])
+@login_required("admin")
+def admin_toggle_multi_subject():
+    enabled = request.form.get("multi_subject") == "1"
+    set_multi_subject_mode(enabled)
+    return redirect(request.referrer or url_for("admin_matching_works"))
+
+
 @app.route("/admin/matching-works")
 @login_required("admin")
 def admin_matching_works():
     data = get_pipeline_data()
+    multi_subject = data.get("multi_subject", False)
     t_count = len(data["tutor_ids"])
-    s_count = len(data["student_ids"])
-    rel_count = len(data["relation"])
+    right_count = len(data["right_ids"])
+    rel_count = len(data["graph_relation"])
     match_count = len(data["pairs"])
     ver = data["verification"]
 
     # Mathematical invariants / safety checks
-    rel_set = set(data["relation"])
-    s_deg = Counter(s for _, s in data["pairs"])
+    rel_set = set(data["graph_relation"])
+    r_deg = Counter(r for _, r in data["pairs"])
     t_deg = Counter(t for t, _ in data["pairs"])
     total_cap = sum(data["capacities"].values())
-    max_possible = min(s_count, total_cap)
+    max_possible = min(right_count, total_cap)
+
+    deg_label = (
+        "No student has more than one tutor per subject (deg(s, subj) ≤ 1)"
+        if multi_subject
+        else "No student has more than one tutor (deg(s) ≤ 1)"
+    )
+    cap_bound_label = (
+        "Matches never exceed what is possible (|M| ≤ min(|S'|, Σc))"
+        if multi_subject
+        else "Matches never exceed what is possible (|M| ≤ min(|S|, Σc))"
+    )
 
     checks = [
-        ("Every match is a compatible pair (M ⊆ R)", all((t, s) in rel_set for t, s in data["pairs"])),
-        ("No student has more than one tutor (deg(s) ≤ 1)", all(d <= 1 for d in s_deg.values())),
+        ("Every match is a compatible pair (M ⊆ R)", all((t, r) in rel_set for t, r in data["pairs"])),
+        (deg_label, all(d <= 1 for d in r_deg.values())),
         ("No tutor is over their limit (deg(t) ≤ c)", all(t_deg[t] <= data["capacities"][t] for t in data["tutor_ids"])),
-        ("Matches never exceed what is possible (|M| ≤ min(|S|, Σc))", match_count <= max_possible),
+        (cap_bound_label, match_count <= max_possible),
         ("The graph has two separate sides (Bipartite)", ver.get("partitions_valid", False)),
         ("The graph's lines equal the compatible pairs (|E| = |R|)", ver.get("edges_valid", False)),
     ]
 
     return render_template(
         "admin/matching_works.html",
-        total_pairs=t_count * s_count,
+        total_pairs=t_count * right_count,
         rel_count=rel_count,
         match_count=match_count,
         checks=checks,
+        multi_subject=multi_subject,
     )
 
 

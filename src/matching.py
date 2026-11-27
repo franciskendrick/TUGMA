@@ -7,9 +7,10 @@ import networkx as nx
 
 
 class CapacityMatcher:
-    def __init__(self, graph, tutor_capacities):
+    def __init__(self, graph, tutor_capacities, student_demands=None):
         self.graph = graph
         self.tutor_capacities = dict(tutor_capacities)
+        self.student_demands = dict(student_demands) if student_demands is not None else {}
         self.assignments = []
         self.unmatched_students = []
         self.remaining_capacity = dict(tutor_capacities)
@@ -81,10 +82,12 @@ class CapacityMatcher:
                 tutor_node, student_node, capacity=1
             )
 
-        # Student -> Sink: each student can be assigned once.
+        # Student -> Sink: up to the student's needed subjects (default 1).
         for student_node in student_nodes:
+            student_id = student_node[1]
+            demand = max(1, int(self.student_demands.get(student_id, 1)))
             flow_network.add_edge(
-                student_node, sink, capacity=1
+                student_node, sink, capacity=demand
             )
 
         # Calculate the maximum possible number of assignments.
@@ -133,11 +136,17 @@ class CapacityMatcher:
         if tutor not in self.tutor_capacities:
             return False
 
-        # A student may only be assigned once.
-        if any(
-            assigned_student == student
-            for _, assigned_student in self.assignments
-        ):
+        # Prevent duplicate (tutor, student) assignments.
+        if (tutor, student) in self.assignments:
+            return False
+
+        # A student may be assigned up to their subject demand (default 1).
+        student_demand = max(1, int(self.student_demands.get(student, 1)))
+        student_load = sum(
+            1 for _, assigned_student in self.assignments
+            if assigned_student == student
+        )
+        if student_load >= student_demand:
             return False
 
         # The tutor must have remaining capacity.

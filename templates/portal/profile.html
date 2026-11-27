@@ -3,12 +3,6 @@
 {% block title %}{{ p.name }} — Profile — TUGMA{% endblock %}
 
 {% block content %}
-{% if mode != 'Tutoring' and ((is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified)) %}
-  <div class="flash flash-error" style="margin-bottom: 16px;">
-    Your tutor profile is pending administrator verification. You will appear in student matches once verified.
-  </div>
-{% endif %}
-
 <div class="profile-hero">
   <div class="profile-banner">
     <span class="pill" style="background:rgba(5,48,31,0.75); color:#fff;">
@@ -222,7 +216,7 @@
       <strong style="color:var(--ink);">Account</strong>
       <div style="display:flex; gap:6px;">
         <span class="pill pill-green">{{ 'Tutor Mode' if mode == 'Tutoring' else 'Student Mode' }}</span>
-        {% if mode != 'Tutoring' and ((is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified)) %}
+        {% if mode == 'Tutoring' and ((is_own and not tutor_verified) or (kind == 'tutor' and not p.verified)) %}
           <span class="pill pill-red">Unverified</span>
         {% endif %}
       </div>
