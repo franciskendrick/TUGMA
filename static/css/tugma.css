@@ -817,6 +817,12 @@ button, input, select, textarea {
   border: 1px solid #B6CEF8;
 }
 
+.cal-event.kind-tutor-avail {
+  background: var(--pill-blue-bg);
+  color: var(--pill-blue-fg);
+  border: 2px dashed var(--pill-blue-fg);
+}
+
 .cal-event.kind-pending {
   background: var(--pill-amber-bg);
   color: var(--pill-amber-fg);
@@ -973,4 +979,92 @@ button, input, select, textarea {
   .stats-grid-4, .cards-grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------------- Tutor Theme (Swapped Topbar & Sidebar) ---------------- */
+.tutor-theme .topbar {
+  background: var(--forest);
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+  color: var(--white);
+}
+
+.tutor-theme .brand-title {
+  color: var(--white);
+}
+
+.tutor-theme .brand-sub {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.tutor-theme .topbar-search input {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--white);
+}
+
+.tutor-theme .topbar-search input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.tutor-theme .topbar-search .search-icon,
+.tutor-theme .icon-btn img {
+  filter: brightness(0) invert(1);
+}
+
+.tutor-theme .mode-toggle {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.tutor-theme .mode-toggle button {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tutor-theme .mode-toggle button.active {
+  background: var(--white);
+  color: var(--forest);
+}
+
+.tutor-theme .icon-btn,
+.tutor-theme .user-chip {
+  color: var(--white);
+}
+
+.tutor-theme .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tutor-theme .sidebar {
+  background: var(--mint);
+  color: var(--forest);
+}
+
+.tutor-theme .viewing-as-card {
+  background: var(--white);
+  border-color: rgba(5, 48, 31, 0.1);
+}
+
+.tutor-theme .viewing-as-label {
+  color: var(--muted);
+}
+
+.tutor-theme .viewing-as-val {
+  color: var(--forest);
+}
+
+.tutor-theme .nav-item {
+  color: var(--forest);
+}
+
+.tutor-theme .nav-item:hover {
+  background: rgba(5, 48, 31, 0.08);
+  color: var(--forest);
+}
+
+.tutor-theme .nav-item.active {
+  background: var(--forest);
+  color: var(--white);
+}
+
+.tutor-theme .sidebar-footer {
+  border-top-color: rgba(5, 48, 31, 0.14);
 }

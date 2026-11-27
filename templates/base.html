@@ -6,7 +6,7 @@
   <title>{% block title %}TUGMA — Peer Tutoring at DLSU-D{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tugma.css') }}">
 </head>
-<body>
+<body class="{{ 'tutor-theme' if mode == 'Tutoring' else '' }}">
   {% block body %}
   <!-- Top Bar -->
   <header class="topbar">
@@ -75,6 +75,9 @@
                 Student
               {% endif %}
             </div>
+            {% if user and user.role == 'member' and mode == 'Tutoring' and not tutor_verified %}
+              <span class="pill pill-amber" style="margin-top:4px; font-size:10px; padding:2px 8px;">Unverified</span>
+            {% endif %}
           </div>
         </div>
 
@@ -94,7 +97,7 @@
               <span>Home</span>
             </a>
             <a href="{{ url_for('classes_page') }}" class="nav-item {{ 'active' if ep == 'classes_page' else '' }}">
-              <span>{{ 'Match with Tutor' if mode == 'Learning' else 'Classes' }}</span>
+              <span>{{ 'Match with Tutor' if mode == 'Learning' else 'Match with Tutee' }}</span>
             </a>
             <a href="{{ url_for('calendar_page') }}" class="nav-item {{ 'active' if ep == 'calendar_page' else '' }}">
               <span>Calendar</span>

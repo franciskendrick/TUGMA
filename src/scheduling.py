@@ -214,14 +214,18 @@ class ScheduleManager:
 
         query = """
             SELECT
-                day,
-                start_time,
-                end_time
-            FROM tutor_availability
-            WHERE tutor_id = ?
-            AND day != 'Sunday'
+                ta.day,
+                ta.start_time,
+                ta.end_time,
+                ta.subject_id,
+                s.subject_code,
+                s.subject_name
+            FROM tutor_availability ta
+            LEFT JOIN subjects s ON s.subject_id = ta.subject_id
+            WHERE ta.tutor_id = ?
+            AND ta.day != 'Sunday'
             ORDER BY
-                CASE day
+                CASE ta.day
                     WHEN 'Monday' THEN 1
                     WHEN 'Tuesday' THEN 2
                     WHEN 'Wednesday' THEN 3
@@ -229,7 +233,7 @@ class ScheduleManager:
                     WHEN 'Friday' THEN 5
                     WHEN 'Saturday' THEN 6
                 END,
-                start_time
+                ta.start_time
         """
 
         rows = self.db.fetch_all(query, (tutor_id,))
@@ -262,7 +266,10 @@ class ScheduleManager:
                 availability.append({
                     "day": row["day"],
                     "start_time": start_time,
-                    "end_time": end_time
+                    "end_time": end_time,
+                    "subject_id": row["subject_id"],
+                    "subject_code": row["subject_code"],
+                    "subject_name": row["subject_name"],
                 })
 
         return availability

@@ -136,11 +136,13 @@ def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
 
         tutor_rows = svc.db.fetch_all(
             "SELECT tutor_id, name, grade_level, course, verified, capacity "
-            "FROM tutors ORDER BY tutor_id"
+            "FROM tutors WHERE verified = 1 ORDER BY tutor_id"
         )
         student_rows = svc.db.fetch_all(
             "SELECT student_id, name, grade_level, course "
-            "FROM students ORDER BY student_id"
+            "FROM students "
+            "WHERE student_id IN (SELECT DISTINCT student_id FROM student_subjects) "
+            "ORDER BY student_id"
         )
 
         # Set Theory: Subjects(t), Needs(s), languages

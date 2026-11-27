@@ -3,6 +3,12 @@
 {% block title %}{{ p.name }} — Profile — TUGMA{% endblock %}
 
 {% block content %}
+{% if (is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified) %}
+  <div class="flash flash-error" style="margin-bottom: 16px;">
+    Your tutor profile is pending administrator verification. You will appear in student matches once verified.
+  </div>
+{% endif %}
+
 <div class="profile-hero">
   <div class="profile-banner">
     <span class="pill" style="background:rgba(5,48,31,0.75); color:#fff;">
@@ -39,6 +45,10 @@
   <a href="{{ prof_url }}?tab=about" class="tab-pill {{ 'active' if tab == 'about' else '' }}">About</a>
   <a href="{{ prof_url }}?tab=info" class="tab-pill {{ 'active' if tab == 'info' else '' }}">Info</a>
   <a href="{{ prof_url }}?tab=classes" class="tab-pill {{ 'active' if tab == 'classes' else '' }}">Classes</a>
+  {% if kind == 'tutor' %}
+    <a href="{{ prof_url }}?tab=reviews" class="tab-pill {{ 'active' if tab == 'reviews' else '' }}">Reviews</a>
+    <a href="{{ prof_url }}?tab=certificates" class="tab-pill {{ 'active' if tab == 'certificates' else '' }}">Certificates</a>
+  {% endif %}
 </div>
 
 {% if tab == 'about' %}
@@ -80,7 +90,7 @@
     </div>
   </div>
 
-{% else %}
+{% elif tab == 'classes' %}
   <div class="card">
     <strong style="color:var(--ink); display:block; margin-bottom:12px;">
       {{ 'Tutoring subjects & availability' if kind == 'tutor' else 'Registered subjects & weekly schedule' }}
@@ -127,25 +137,138 @@
       </div>
     {% endif %}
   </div>
+
+{% elif tab == 'reviews' and kind == 'tutor' %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; font-size:16px; margin-bottom:4px;">Teaching rating</strong>
+    <p style="margin:0 0 18px 0; font-size:12.5px; color:var(--muted);">From verified students after each session. Only students who attended can rate.</p>
+
+    {% if pdata.rating.overall %}
+      <div style="display:grid; grid-template-columns: 180px 1fr; gap: 24px; align-items: center;">
+        <div style="border-right:1px solid var(--border); padding-right:16px;">
+          <div style="font-size:38px; font-weight:800; color:var(--ink); line-height:1;">{{ pdata.rating.overall }}</div>
+          <div style="color:#E59819; font-size:16px; margin:6px 0;">★★★★★</div>
+          <div style="font-size:12px; color:var(--muted);">{{ pdata.rating.rated_sessions }} rated sessions · {{ pdata.rating.rated_students }} students</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          {% for c in pdata.rating.criteria %}
+            <div style="display:grid; grid-template-columns: 165px 1fr 34px; gap:12px; align-items:center; font-size:13px;">
+              <span style="font-weight:600; color:var(--ink);">{{ c.criterion }}</span>
+              <div style="background:var(--surface); height:8px; border-radius:999px; overflow:hidden;">
+                <div style="background:var(--primary); height:100%; width:{{ ((c.average_rating / 5) * 100)|round|int }}%; border-radius:999px;"></div>
+              </div>
+              <strong style="text-align:right; color:var(--ink);">{{ '%.1f'|format(c.average_rating) }}</strong>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <p style="margin:0; color:var(--muted);">No student ratings yet.</p>
+    {% endif %}
+  </div>
+
+{% elif tab == 'certificates' and kind == 'tutor' %}
+  {% set earned_count = pdata.certificates|selectattr('status', 'equalto', 'earned')|list|length %}
+  {% set prog_count = pdata.certificates|length - earned_count %}
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+      <div>
+        <strong style="color:var(--ink); font-size:16px; display:block;">Certificates</strong>
+        <span style="font-size:12px; color:var(--muted);">{{ earned_count }} earned · {{ prog_count }} in progress</span>
+      </div>
+      <span class="pill pill-green">Bronze 5+, Silver 10+, Gold 20+ ratings at 4.5★ or higher</span>
+    </div>
+
+    {% if pdata.certificates %}
+      <div style="display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px;">
+        {% for cert in pdata.certificates %}
+          <div style="border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="avatar avatar-sm" style="background:{{ '#F6E8DC' if cert.status == 'earned' else 'var(--pill-gray-bg)' }}; color:{{ '#9C5B2E' if cert.status == 'earned' else 'var(--muted)' }};">
+                🏅
+              </span>
+              <div>
+                <div style="font-weight:800; font-size:13.5px; color:var(--ink);">{{ cert.title }}</div>
+                <div style="font-size:11.5px; font-weight:700; color:{{ '#9C5B2E' if cert.status == 'earned' else 'var(--muted)' }};">
+                  {{ (cert.tier|title + ' certificate') if cert.status == 'earned' else 'In progress' }}
+                </div>
+              </div>
+            </div>
+            <div style="font-size:12px; color:var(--body);">{{ cert.description or cert.requirement_label }}</div>
+            <div style="margin-top:auto;">
+              {% if cert.status == 'earned' %}
+                <div style="font-size:11.5px; font-weight:700; color:var(--primary);">✓ Earned {{ cert.earned_date or '' }}</div>
+              {% else %}
+                <div style="background:var(--surface); height:6px; border-radius:999px; overflow:hidden; margin-bottom:4px;">
+                  <div style="background:var(--primary); height:100%; width:{{ cert.progress_percent }}%;"></div>
+                </div>
+                <div style="font-size:11px; color:var(--muted);">{{ cert.progress_value }} of {{ cert.target_value }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="margin:0; color:var(--muted);">No certificates recorded yet.</p>
+    {% endif %}
+  </div>
 {% endif %}
 {% endblock %}
 
 {% block right_rail %}
 <aside class="right-rail">
   <div class="card">
-    <strong style="color:var(--ink); display:block; margin-bottom:12px;">Account</strong>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <strong style="color:var(--ink);">Account</strong>
+      <div style="display:flex; gap:6px;">
+        <span class="pill pill-green">{{ 'Tutor Mode' if mode == 'Tutoring' else 'Student Mode' }}</span>
+        {% if (is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified) %}
+          <span class="pill pill-amber">Unverified</span>
+        {% endif %}
+      </div>
+    </div>
     {% if owner_user %}
       <div style="font-size:12.5px; color:var(--muted); margin-bottom:10px;">
         <div>Joined {{ owner_user.created_at[:10] }}</div>
         <div style="margin-top:4px;">{{ owner_user.email }}</div>
       </div>
     {% endif %}
-    {% if is_own %}
+    {% if kind == 'tutor' %}
+  {% set earned_certs = pdata.certificates|selectattr('status', 'equalto', 'earned')|list|length %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">Trust Signals</strong>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+      <div><strong>{{ tutor_subjects|length }}</strong> Tutoring Subjects</div>
+      <div>
+        <span style="color:#E59819;">★</span>
+        <strong>{{ pdata.rating.overall or '—' }}</strong> teaching rating ({{ pdata.rating.rated_sessions }} sessions)
+      </div>
+      <div><strong>{{ earned_certs }}</strong> certificate(s) earned</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if is_own %}
       <form action="{{ url_for('logout') }}" method="post">
         <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Log out</button>
       </form>
     {% endif %}
   </div>
+
+  {% if kind == 'tutor' %}
+  {% set earned_certs = pdata.certificates|selectattr('status', 'equalto', 'earned')|list|length %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">Trust Signals</strong>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+      <div><strong>{{ tutor_subjects|length }}</strong> Tutoring Subjects</div>
+      <div>
+        <span style="color:#E59819;">★</span>
+        <strong>{{ pdata.rating.overall or '—' }}</strong> teaching rating ({{ pdata.rating.rated_sessions }} sessions)
+      </div>
+      <div><strong>{{ earned_certs }}</strong> certificate(s) earned</div>
+    </div>
+  </div>
+  {% endif %}
 
   {% if is_own %}
   <div class="card">

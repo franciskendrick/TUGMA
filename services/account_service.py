@@ -160,7 +160,7 @@ def delete_class(db, user_id, schedule_id):
 
 
 # ---------------------------------------------- availability (tutor)
-def add_availability(db, user_id, day, start, end):
+def add_availability(db, user_id, day, start, end, subject_id=None):
     user = require_role(db, user_id, "tutor")
     _check_interval(day, start, end)
     if _overlaps(db, "tutor_availability", "tutor_id", user["tutor_id"],
@@ -172,9 +172,9 @@ def add_availability(db, user_id, day, start, end):
     ):
         raise AuthError("This overlaps one of your own classes.")
     db.execute(
-        "INSERT INTO tutor_availability (tutor_id, day, start_time, end_time) "
-        "VALUES (?, ?, ?, ?)",
-        (user["tutor_id"], day, start, end),
+        "INSERT INTO tutor_availability (tutor_id, subject_id, day, start_time, end_time) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user["tutor_id"], subject_id, day, start, end),
     )
 
 

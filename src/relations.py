@@ -24,11 +24,11 @@ class CompatibilityRelation:
         return [row["tutor_id"] for row in rows]
 
     def get_students(self):
-        """Retrieve all student IDs from the database."""
+        """Retrieve student IDs who have requested at least one subject."""
 
         query = """
-            SELECT student_id
-            FROM students
+            SELECT DISTINCT student_id
+            FROM student_subjects
             ORDER BY student_id
         """
 

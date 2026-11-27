@@ -2,18 +2,29 @@
 {% block title %}Calendar — TUGMA{% endblock %}
 
 {% block content %}
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
   <div>
-    <h1 class="page-title">Calendar</h1>
-    <p class="page-subtitle" style="margin:0;">Weekly classes, free time blocks, and tutoring sessions.</p>
+    <h1 class="page-title" style="margin-bottom:2px;">{{ month_label }}</h1>
+    <p class="page-subtitle" style="margin:0;">{{ week_range_label }} · Empty blocks mean you are free.</p>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:8px;">
+    <a href="{{ url_for('calendar_page', week=today_week) }}" class="btn btn-outline btn-sm">Today</a>
+    <a href="{{ url_for('calendar_page', week=prev_week) }}" class="btn btn-outline btn-sm" title="Previous week" style="padding:0 12px;">‹</a>
+    <a href="{{ url_for('calendar_page', week=next_week) }}" class="btn btn-outline btn-sm" title="Next week" style="padding:0 12px;">›</a>
   </div>
 </div>
 
 <div class="cal-grid-wrap">
   <div class="cal-header">
-    <div class="cal-header-cell" style="border-left:none; color:var(--muted); font-size:11px;">GMT+8</div>
-    {% for d in DAYS %}
-      <div class="cal-header-cell">{{ d[:3] }}</div>
+    <div class="cal-header-cell" style="border-left:none; color:var(--muted); font-size:11px; display:flex; align-items:center; justify-content:center;">GMT+8</div>
+    {% for wd in week_days %}
+      <div class="cal-header-cell">
+        <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;">{{ wd.short }}</div>
+        <div style="margin-top:4px; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; font-size:13.5px; font-weight:800; {{ 'background:var(--primary); color:#fff;' if wd.is_today else 'color:var(--ink);' }}">
+          {{ wd.num }}
+        </div>
+      </div>
     {% endfor %}
   </div>
   <div class="cal-body">
@@ -22,9 +33,9 @@
         <div class="cal-hour-label">{{ (h % 12) or 12 }} {{ 'AM' if h < 12 else 'PM' }}</div>
       {% endfor %}
     </div>
-    {% for d in DAYS %}
+    {% for wd in week_days %}
       <div class="cal-day-col">
-        {% for ev in positioned[d] %}
+        {% for ev in positioned[wd.name] %}
           <div class="cal-event kind-{{ ev.kind }}" style="top: {{ '%.2f'|format(ev.top_pct) }}%; height: {{ '%.2f'|format(ev.height_pct) }}%;" title="{{ ev.title }} ({{ ev.subtitle }})">
             <strong>{{ ev.title }}</strong><br>
             <span style="opacity:0.9;">{{ ev.subtitle }}</span>
@@ -35,36 +46,39 @@
   </div>
 </div>
 
-{% if mode == 'Learning' %}
-  <h2 class="section-title">My classes (busy times)</h2>
-  <div class="card">
-    {% if classes %}
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        {% for c in classes %}
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border:1px solid var(--border); border-radius:10px;">
-            <div>
-              <strong>{{ c.subject_code }}</strong> — {{ c.subject_name.title() }}
-              <span style="color:var(--muted); margin-left:8px;">{{ c.day }} {{ fmt12(c.start_time) }} – {{ fmt12(c.end_time) }}</span>
-            </div>
-            <form action="{{ url_for('delete_class_route') }}" method="post">
-              <input type="hidden" name="schedule_id" value="{{ c.schedule_id }}">
-              <button type="submit" class="btn btn-danger-outline btn-sm">Delete</button>
-            </form>
+<h2 class="section-title">My classes (busy times)</h2>
+<div class="card">
+  {% if classes %}
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      {% for c in classes %}
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border:1px solid var(--border); border-radius:10px;">
+          <div>
+            <strong>{{ c.subject_code }}</strong> — {{ c.subject_name.title() }}
+            <span style="color:var(--muted); margin-left:8px;">{{ c.day }} {{ fmt12(c.start_time) }} – {{ fmt12(c.end_time) }}</span>
           </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p style="margin:0; color:var(--muted);">No classes added yet. Use the form on the right to add your class schedule.</p>
-    {% endif %}
-  </div>
-{% else %}
+          <form action="{{ url_for('delete_class_route') }}" method="post">
+            <input type="hidden" name="schedule_id" value="{{ c.schedule_id }}">
+            <button type="submit" class="btn btn-danger-outline btn-sm">Delete</button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p style="margin:0; color:var(--muted);">No classes added yet. Use the form on the right to add your class schedule.</p>
+  {% endif %}
+</div>
+
+{% if mode == 'Tutoring' %}
   <h2 class="section-title">When I can tutor</h2>
   <div class="card">
     {% if avail_rows %}
       <div style="display:flex; flex-direction:column; gap:8px;">
         {% for a in avail_rows %}
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border:1px solid var(--border); border-radius:10px;">
-            <div><strong>{{ a.day }}</strong> {{ fmt12(a.start_time) }} – {{ fmt12(a.end_time) }}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border:1px dashed var(--pill-blue-fg); background:var(--pill-blue-bg); border-radius:10px;">
+            <div>
+              <strong>{{ a.subject_code ~ ' — ' ~ a.subject_name.title() if a.subject_name else 'General tutoring' }}</strong>
+              <span style="color:var(--pill-blue-fg); margin-left:8px;">{{ a.day }} {{ fmt12(a.start_time) }} – {{ fmt12(a.end_time) }}</span>
+            </div>
             <form action="{{ url_for('delete_availability_route') }}" method="post">
               <input type="hidden" name="availability_id" value="{{ a.availability_id }}">
               <button type="submit" class="btn btn-danger-outline btn-sm">Delete</button>
@@ -73,7 +87,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p style="margin:0; color:var(--muted);">No availability blocks added yet.</p>
+      <p style="margin:0; color:var(--muted);">No tutoring availability blocks added yet. Add them in <a href="{{ url_for('classes_page') }}" style="color:var(--primary); font-weight:700;">Match with Tutee</a>.</p>
     {% endif %}
   </div>
 {% endif %}
@@ -85,64 +99,43 @@
     <strong style="color:var(--ink); display:block; margin-bottom:10px;">Calendars</strong>
     <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px;">
       <div style="display:flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border-radius:3px; background:var(--primary);"></span> Classes (busy)</div>
-      <div style="display:flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border-radius:3px; background:var(--pill-green-bg); border:1px dashed var(--accent);"></span> Free / Available time</div>
+      {% if mode == 'Tutoring' %}
+        <div style="display:flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border-radius:3px; background:var(--pill-blue-bg); border:1.5px dashed var(--pill-blue-fg);"></span> Tutoring availability</div>
+      {% endif %}
       <div style="display:flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border-radius:3px; background:var(--pill-blue-bg); border:1px solid #B6CEF8;"></span> Confirmed sessions</div>
       <div style="display:flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border-radius:3px; background:var(--pill-amber-bg); border:1px solid #F3D492;"></span> Pending requests</div>
     </div>
   </div>
 
   <div class="card">
-    {% if mode == 'Learning' %}
-      <strong style="color:var(--ink); display:block; margin-bottom:12px;">Add a class</strong>
-      <form action="{{ url_for('add_class_route') }}" method="post">
+    <strong style="color:var(--ink); display:block; margin-bottom:12px;">Add a class</strong>
+    <form action="{{ url_for('add_class_route') }}" method="post">
+      <div class="form-group">
+        <label class="form-label">Subject</label>
+        <select name="subject_id" class="form-control" required>
+          {% for s in subjects %}
+            <option value="{{ s.subject_id }}">{{ s.subject_code }} — {{ s.subject_name.title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Day</label>
+        <select name="day" class="form-control">
+          {% for d in DAYS %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+        </select>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         <div class="form-group">
-          <label class="form-label">Subject</label>
-          <select name="subject_id" class="form-control" required>
-            {% for s in subjects %}
-              <option value="{{ s.subject_id }}">{{ s.subject_code }} — {{ s.subject_name.title() }}</option>
-            {% endfor %}
-          </select>
+          <label class="form-label">Start</label>
+          <input type="time" name="start_time" class="form-control" value="08:00" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Day</label>
-          <select name="day" class="form-control">
-            {% for d in DAYS %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-          </select>
+          <label class="form-label">End</label>
+          <input type="time" name="end_time" class="form-control" value="09:30" required>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div class="form-group">
-            <label class="form-label">Start</label>
-            <input type="time" name="start_time" class="form-control" value="08:00" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">End</label>
-            <input type="time" name="end_time" class="form-control" value="09:30" required>
-          </div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm btn-full">+ Add class</button>
-      </form>
-    {% else %}
-      <strong style="color:var(--ink); display:block; margin-bottom:12px;">Add weekly availability</strong>
-      <form action="{{ url_for('add_availability_route') }}" method="post">
-        <div class="form-group">
-          <label class="form-label">Day</label>
-          <select name="day" class="form-control">
-            {% for d in DAYS %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-          </select>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div class="form-group">
-            <label class="form-label">From</label>
-            <input type="time" name="start_time" class="form-control" value="13:00" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">To</label>
-            <input type="time" name="end_time" class="form-control" value="15:00" required>
-          </div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm btn-full">+ Add availability</button>
-      </form>
-    {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm btn-full">+ Add class</button>
+    </form>
   </div>
 </aside>
 {% endblock %}

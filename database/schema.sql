@@ -131,6 +131,11 @@ CREATE TABLE tutor_languages (
     FOREIGN KEY (tutor_id)
         REFERENCES tutors(tutor_id)
         ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (subject_id)
+        REFERENCES subjects(subject_id)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 );
 
@@ -185,6 +190,7 @@ CREATE TABLE student_schedule (
 CREATE TABLE tutor_availability (
     availability_id INTEGER PRIMARY KEY,
     tutor_id        INTEGER NOT NULL,
+    subject_id      INTEGER,
     day             TEXT NOT NULL
                     CHECK (
                         day IN (
@@ -211,6 +217,11 @@ CREATE TABLE tutor_availability (
     FOREIGN KEY (tutor_id)
         REFERENCES tutors(tutor_id)
         ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (subject_id)
+        REFERENCES subjects(subject_id)
+        ON DELETE SET NULL
         ON UPDATE CASCADE
 );
 

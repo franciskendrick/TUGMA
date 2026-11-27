@@ -29,7 +29,11 @@ class CompatibilityLogic:
         """Check whether the tutor and student share available time."""
 
         student_free = self.schedules.get_student_free_slots(student_id)
-        tutor_available = self.schedules.get_tutor_available_slots(tutor_id)
+        student_needs = self.sets.get_student_needs(student_id)
+        tutor_available = [
+            slot for slot in self.schedules.get_tutor_available_slots(tutor_id)
+            if slot.get("subject_code") is None or slot.get("subject_code") in student_needs
+        ]
 
         common_slots = self.sets.availability_intersection(
             student_free,

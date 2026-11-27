@@ -7,7 +7,7 @@ directly to src/ (Discrete Structures engine) and services/ (business logic).
 import io
 import os
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 import matplotlib
@@ -138,15 +138,21 @@ def inject_globals():
     user = current_user()
     mode = active_mode(user)
     notif_count = 0
-    if user and user["role"] == "member" and mode:
-        try:
-            tabs = list_sessions(get_db(), user["user_id"], mode)
-            notif_count = len(tabs["reply"]) if mode == "Tutoring" else len(tabs["sent"])
-        except Exception:
-            notif_count = 0
+    tutor_verified = None
+    if user and user["role"] == "member":
+        if user["tutor_id"]:
+            t_row = get_db().fetch_one("SELECT verified FROM tutors WHERE tutor_id = ?", (user["tutor_id"],))
+            tutor_verified = bool(t_row["verified"]) if t_row else False
+        if mode:
+            try:
+                tabs = list_sessions(get_db(), user["user_id"], mode)
+                notif_count = len(tabs["reply"]) if mode == "Tutoring" else len(tabs["sent"])
+            except Exception:
+                notif_count = 0
     return {
         "user": user,
         "mode": mode,
+        "tutor_verified": tutor_verified,
         "initials": initials,
         "fmt12": fmt12,
         "fmt_range": fmt_range,
@@ -414,7 +420,7 @@ def _evaluate_student_tutors(db, sid, subject_code, data):
             else:
                 subj_ok = ev["subject_match"]
 
-            slots = common_slots(db, tid, sid) if ev["time_match"] else []
+            slots = common_slots(db, tid, sid, subject_code=subject_code) if ev["time_match"] else []
             rules_met = sum([subj_ok, ev["time_match"], ev["language_match"], True])
 
             t_langs = sorted(svc.sets.get_tutor_languages(tid))
@@ -505,6 +511,15 @@ def classes_page():
             selected_id = teaches[0]["subject_id"]
         selected_teach = next((t for t in teaches if t["subject_id"] == selected_id), None)
 
+        avail_rows = db.fetch_all(
+            "SELECT ta.availability_id, ta.subject_id, ta.day, ta.start_time, ta.end_time, "
+            "s.subject_code, s.subject_name "
+            "FROM tutor_availability ta "
+            "LEFT JOIN subjects s ON s.subject_id = ta.subject_id "
+            "WHERE ta.tutor_id = ? ORDER BY ta.day, ta.start_time",
+            (tid,),
+        )
+
         students_needing = []
         if selected_teach:
             students_needing = db.fetch_all(
@@ -521,6 +536,7 @@ def classes_page():
             selected_teach=selected_teach,
             available_subjects=available_subjects,
             students_needing=students_needing,
+            avail_rows=avail_rows,
         )
 
 
@@ -574,17 +590,17 @@ def delete_teach_route():
 # ---------------------------------------------------------------------------
 # Member Portal: Calendar
 # ---------------------------------------------------------------------------
-def _build_calendar_events(db, user, mode):
+def _build_calendar_events(db, user, mode, week_start, week_end):
     """Build weekly grid events (Mon-Sat, 7 AM - 6 PM) for the logged-in user."""
     events = []
-    if mode == "Learning":
-        sid = user["student_id"]
+    classes = []
+    if user["student_id"] is not None:
         classes = db.fetch_all(
             "SELECT sc.schedule_id, sc.day, sc.start_time, sc.end_time, "
             "sub.subject_code, sub.subject_name "
             "FROM student_schedule sc JOIN subjects sub ON sub.subject_id = sc.subject_id "
             "WHERE sc.student_id = ? ORDER BY sc.day, sc.start_time",
-            (sid,),
+            (user["student_id"],),
         )
         for c in classes:
             events.append({
@@ -595,47 +611,36 @@ def _build_calendar_events(db, user, mode):
                 "title": c["subject_name"],
                 "subtitle": c["subject_code"],
             })
-        # Free blocks (gaps) from ScheduleManager
-        svc = Services()
-        try:
-            free_slots = svc.schedules.get_student_free_slots(sid)
-        finally:
-            svc.close()
-        for f in free_slots:
-            events.append({
-                "kind": "free",
-                "day": f["day"],
-                "start": f["start_time"],
-                "end": f["end_time"],
-                "title": "Free time",
-                "subtitle": f"{fmt12(f['start_time'])}–{fmt12(f['end_time'])}",
-            })
-        avail_rows = []
-    else:
-        tid = user["tutor_id"]
-        classes = []
+
+    avail_rows = []
+    if mode == "Tutoring" and user["tutor_id"] is not None:
         avail_rows = db.fetch_all(
-            "SELECT availability_id, day, start_time, end_time "
-            "FROM tutor_availability WHERE tutor_id = ? ORDER BY day, start_time",
-            (tid,),
+            "SELECT ta.availability_id, ta.subject_id, ta.day, ta.start_time, ta.end_time, "
+            "s.subject_code, s.subject_name "
+            "FROM tutor_availability ta "
+            "LEFT JOIN subjects s ON s.subject_id = ta.subject_id "
+            "WHERE ta.tutor_id = ? ORDER BY ta.day, ta.start_time",
+            (user["tutor_id"],),
         )
         for a in avail_rows:
             events.append({
-                "kind": "free",
+                "kind": "tutor-avail",
                 "day": a["day"],
                 "start": a["start_time"],
                 "end": a["end_time"],
-                "title": "Available to tutor",
-                "subtitle": f"{fmt12(a['start_time'])}–{fmt12(a['end_time'])}",
+                "title": f"Tutor: {a['subject_name'].title()}" if a["subject_name"] else "Available to tutor",
+                "subtitle": a["subject_code"] or f"{fmt12(a['start_time'])}–{fmt12(a['end_time'])}",
             })
 
-    # Add upcoming/pending sessions
+    # Add upcoming/pending sessions that fall within the selected week
     tabs = list_sessions(db, user["user_id"], mode)
     for s in tabs["upcoming"]:
-        day_name = datetime.strptime(s["session_date"], "%Y-%m-%d").strftime("%A")
+        s_date = datetime.strptime(s["session_date"], "%Y-%m-%d").date()
+        if not (week_start <= s_date <= week_end):
+            continue
         events.append({
             "kind": "session",
-            "day": day_name,
+            "day": s_date.strftime("%A"),
             "start": s["start_time"],
             "end": s["end_time"],
             "title": s["subject_name"],
@@ -643,10 +648,12 @@ def _build_calendar_events(db, user, mode):
         })
     pending_list = tabs["sent"] if mode == "Learning" else tabs["reply"]
     for s in pending_list:
-        day_name = datetime.strptime(s["session_date"], "%Y-%m-%d").strftime("%A")
+        s_date = datetime.strptime(s["session_date"], "%Y-%m-%d").date()
+        if not (week_start <= s_date <= week_end):
+            continue
         events.append({
             "kind": "pending",
-            "day": day_name,
+            "day": s_date.strftime("%A"),
             "start": s["start_time"],
             "end": s["end_time"],
             "title": f"Pending: {s['subject_name']}",
@@ -661,11 +668,41 @@ def calendar_page():
     user = current_user()
     mode = active_mode(user)
     db = get_db()
-    events, classes, avail_rows = _build_calendar_events(db, user, mode)
+
+    today_date = datetime.now().date()
+    default_monday = today_date - timedelta(days=today_date.weekday())
+    week_param = request.args.get("week")
+    try:
+        anchor = datetime.strptime(week_param, "%Y-%m-%d").date() if week_param else default_monday
+    except ValueError:
+        anchor = default_monday
+    week_start = anchor - timedelta(days=anchor.weekday())
+    week_end = week_start + timedelta(days=5)  # Saturday
+
+    prev_week = (week_start - timedelta(days=7)).isoformat()
+    next_week = (week_start + timedelta(days=7)).isoformat()
+    today_week = default_monday.isoformat()
+
+    month_label = week_start.strftime("%B %Y")
+    if week_start.month == week_end.month:
+        week_range_label = f"{week_start.strftime('%b %d')} – {week_end.strftime('%d, %Y')}"
+    else:
+        week_range_label = f"{week_start.strftime('%b %d')} – {week_end.strftime('%b %d, %Y')}"
+
+    week_days = []
+    for i, d_name in enumerate(DAYS):
+        d_date = week_start + timedelta(days=i)
+        week_days.append({
+            "name": d_name,
+            "short": d_name[:3],
+            "num": d_date.day,
+            "is_today": d_date == today_date,
+        })
+
+    events, classes, avail_rows = _build_calendar_events(db, user, mode, week_start, week_end)
     subjects = db.fetch_all("SELECT * FROM subjects ORDER BY subject_code")
 
     hours = list(range(7, 19))  # 7 AM to 6 PM
-    # Compute percentage top & height for each event in a 7:00-19:00 (720 min) grid
     positioned = {d: [] for d in DAYS}
     for ev in events:
         if ev["day"] not in positioned:
@@ -685,6 +722,12 @@ def calendar_page():
         classes=classes,
         avail_rows=avail_rows,
         subjects=subjects,
+        month_label=month_label,
+        week_range_label=week_range_label,
+        week_days=week_days,
+        prev_week=prev_week,
+        next_week=next_week,
+        today_week=today_week,
     )
 
 
@@ -692,12 +735,15 @@ def calendar_page():
 @login_required("member")
 def add_class_route():
     user = current_user()
+    db = get_db()
     subject_id = request.form.get("subject_id", type=int)
     day = request.form.get("day", "")
     start = request.form.get("start_time", "")
     end = request.form.get("end_time", "")
     try:
-        add_class(get_db(), user["user_id"], subject_id, day, start, end)
+        if user["student_id"] is None:
+            add_profile(db, user["user_id"], "student")
+        add_class(db, user["user_id"], subject_id, day, start, end)
         flash("Class added to your calendar.", "success")
     except AuthError as err:
         flash(str(err), "error")
@@ -718,15 +764,16 @@ def delete_class_route():
 @login_required("member")
 def add_availability_route():
     user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
     day = request.form.get("day", "")
     start = request.form.get("start_time", "")
     end = request.form.get("end_time", "")
     try:
-        add_availability(get_db(), user["user_id"], day, start, end)
-        flash("Availability added.", "success")
+        add_availability(get_db(), user["user_id"], day, start, end, subject_id=subject_id)
+        flash("Tutoring availability added.", "success")
     except AuthError as err:
         flash(str(err), "error")
-    return redirect(url_for("calendar_page"))
+    return redirect(request.referrer or url_for("classes_page"))
 
 
 @app.route("/calendar/availability/delete", methods=["POST"])
@@ -736,7 +783,7 @@ def delete_availability_route():
     availability_id = request.form.get("availability_id", type=int)
     delete_availability(get_db(), user["user_id"], availability_id)
     flash("Availability removed.", "success")
-    return redirect(url_for("calendar_page"))
+    return redirect(request.referrer or url_for("classes_page"))
 
 
 # ---------------------------------------------------------------------------
@@ -826,11 +873,14 @@ def people_page():
         "LEFT JOIN subjects sub ON sub.subject_id = ts.subject_id "
         "LEFT JOIN tutor_reviews tr ON tr.tutor_id = t.tutor_id "
         "LEFT JOIN tutor_review_scores rs ON rs.review_id = tr.review_id "
+        "WHERE t.verified = 1 "
         "GROUP BY t.tutor_id ORDER BY t.name"
     )
     students = db.fetch_all(
         "SELECT s.student_id, s.name, s.course, s.grade_level "
-        "FROM students s ORDER BY s.name"
+        "FROM students s "
+        "WHERE s.student_id IN (SELECT DISTINCT student_id FROM student_subjects) "
+        "ORDER BY s.name"
     )
 
     people_rows = []
@@ -918,7 +968,7 @@ def student_profile(student_id):
         flash("Student profile not found.", "error")
         return redirect(url_for("people_page"))
     tab = request.args.get("tab", "about")
-    if tab not in ("about", "info", "classes"):
+    if tab not in ("about", "info", "classes", "reviews", "certificates"):
         tab = "about"
     is_own = user["student_id"] == student_id
     owner_user = db.fetch_one("SELECT email, created_at FROM users WHERE student_id = ?", (student_id,))
@@ -942,7 +992,7 @@ def tutor_profile(tutor_id):
         flash("Tutor profile not found.", "error")
         return redirect(url_for("people_page"))
     tab = request.args.get("tab", "about")
-    if tab not in ("about", "info", "classes"):
+    if tab not in ("about", "info", "classes", "reviews", "certificates"):
         tab = "about"
     is_own = user["tutor_id"] == tutor_id
     owner_user = db.fetch_one("SELECT email, created_at FROM users WHERE tutor_id = ?", (tutor_id,))

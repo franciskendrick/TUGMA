@@ -30,13 +30,18 @@ def upcoming_dates(day_name, weeks=4):
     return [first + timedelta(weeks=i) for i in range(weeks)]
 
 
-def common_slots(db, tutor_id, student_id):
+def common_slots(db, tutor_id, student_id, subject_code=None):
     """Weekly slots when both are free (same sets as TimeMatch)."""
     schedules = ScheduleManager(db)
     sets = SetOperations(db)
+    allowed_codes = {subject_code} if subject_code else sets.get_student_needs(student_id)
+    tutor_slots = [
+        sl for sl in schedules.get_tutor_available_slots(tutor_id)
+        if sl.get("subject_code") is None or sl.get("subject_code") in allowed_codes
+    ]
     return sets.availability_intersection(
         schedules.get_student_free_slots(student_id),
-        schedules.get_tutor_available_slots(tutor_id),
+        tutor_slots,
     )
 
 
