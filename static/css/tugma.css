@@ -935,7 +935,8 @@ button, input, select, textarea {
 }
 
 .auth-left {
-  background: linear-gradient(180deg, rgba(0, 72, 42, 0.85), rgba(5, 48, 31, 0.94));
+  background: linear-gradient(180deg, rgba(0, 72, 42, 0.78), rgba(5, 48, 31, 0.90)),
+            url('/assets/LaSalle_LogIn_Banner.jpg') center 25% / cover no-repeat;
   color: var(--white);
   padding: 36px 40px;
   display: flex;
