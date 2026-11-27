@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Match with Tutor — TUGMA{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 22px; align-items: start;">
+  <!-- Left panel: Subjects I need help with -->
+  <div class="card">
+    <h2 style="margin: 0 0 14px 0; font-size: 16px; font-weight: 800; color: var(--ink);">Subjects I need help with</h2>
+
+    <form action="{{ url_for('add_need_route') }}" method="post">
+      <div class="form-group">
+        <label class="form-label">Add a subject</label>
+        <select name="subject_id" class="form-control" required>
+          {% for s in available_subjects %}
+            <option value="{{ s.subject_id }}">{{ s.subject_code }} — {{ s.subject_name.title() }}</option>
+          {% else %}
+            <option disabled>All subjects added</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">What are you stuck on?</label>
+        <input type="text" name="note" class="form-control" placeholder="e.g. Proof by induction">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" {{ 'disabled' if not available_subjects else '' }}>+ Add subject</button>
+    </form>
+
+    <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+      {% for n in needs %}
+        {% set is_sel = selected_need and selected_need.subject_id == n.subject_id %}
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:12px; border:1px solid {{ 'var(--primary)' if is_sel else 'var(--border)' }}; background:{{ 'var(--pill-green-bg)' if is_sel else 'var(--white)' }};">
+          <a href="{{ url_for('classes_page', subject_id=n.subject_id) }}" style="flex:1; min-width:0;">
+            <div style="font-weight:800; font-size:13px; color:var(--ink);">{{ n.subject_name.title() }}</div>
+            <div style="font-size:11.5px; color:var(--muted);">{{ n.subject_code }}{% if n.note %} · {{ n.note }}{% endif %}</div>
+          </a>
+          <form action="{{ url_for('delete_need_route') }}" method="post">
+            <input type="hidden" name="subject_id" value="{{ n.subject_id }}">
+            <button type="submit" class="btn btn-ghost btn-sm" style="min-height:28px; padding:0 8px;" title="Remove">✕</button>
+          </form>
+        </div>
+      {% else %}
+        <p style="font-size:12.5px; color:var(--muted); margin:6px 0 0 0;">No subjects added yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Right panel: Tutors available -->
+  <div>
+    {% if selected_need %}
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+        <span class="pill pill-green" style="font-size:13px; padding:8px 12px; border-radius:10px;">{{ selected_need.subject_code }}</span>
+        <div>
+          <h1 class="page-title" style="font-size:22px; margin:0;">{{ selected_need.subject_name.title() }}</h1>
+          <div style="font-size:12.5px; color:var(--muted);">
+            {% if selected_need.note %}Stuck on: {{ selected_need.note }}{% else %}Compatible tutors evaluated across all 4 Discrete Structures rules{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title" style="margin-top:0;">
+        Tutors available <span class="pill pill-green">{{ full_matches|length }}</span>
+      </h2>
+
+      {% if full_matches %}
+        <div class="cards-grid-2">
+          {% for m in full_matches %}
+            {% set t = m.tutor %}
+            <div class="match-card">
+              <div class="card-header-row">
+                <div class="person-meta">
+                  <div class="avatar">{{ initials(t.name) }}</div>
+                  <div>
+                    <div class="person-name">{{ t.name }}</div>
+                    <div class="person-sub">{{ t.course }}, Year {{ t.grade_level }} · Peer tutor</div>
+                    {% if t.avg_rating %}
+                      <div class="person-sub" style="color:var(--ink); font-weight:700;">★ {{ '%.1f'|format(t.avg_rating) }} ({{ t.review_count }} reviews)</div>
+                    {% endif %}
+                  </div>
+                </div>
+                <span class="pill pill-green">4/4 Compatibility</span>
+              </div>
+
+              <div class="why-box">
+                <div class="why-title">Why you matched</div>
+                <div class="why-rule"><span class="ok">✓</span> <strong>Subject:</strong> Teaches {{ selected_need.subject_name.title() }}</div>
+                <div class="why-rule"><span class="ok">✓</span> <strong>Schedule:</strong> Both free {{ m.slots|map('fmt_range')|join(', ') }}</div>
+                <div class="why-rule"><span class="ok">✓</span> <strong>Language:</strong> Speaks {{ m.languages|join(', ') }}</div>
+                <div class="why-rule"><span class="ok">✓</span> <strong>Capacity:</strong> {{ m.remaining_spots }} spot(s) left</div>
+              </div>
+
+              <div class="slot-chips">
+                {% for sl in m.slots[:3] %}
+                  <span class="slot-chip">{{ fmt_range(sl) }}</span>
+                {% endfor %}
+              </div>
+
+              <div class="card-actions">
+                <a href="{{ url_for('tutor_profile', tutor_id=t.tutor_id) }}" class="btn btn-outline btn-sm">View profile</a>
+                <button type="button" class="btn btn-primary btn-sm"
+                        onclick='openRequestModal({{ t.tutor_id }}, {{ t.name|tojson }}, {{ selected_need.subject_id }}, {{ m.slot_options|tojson }})'>
+                  Request tutoring
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card" style="color:var(--muted);">
+          No tutors meet all 4 compatibility rules for {{ selected_need.subject_name.title() }} yet. Check "Almost a match" below or add more free time on your Calendar.
+        </div>
+      {% endif %}
+
+      {% if almost_matches %}
+        <h2 class="section-title">Almost a match</h2>
+        <p class="page-subtitle" style="margin-bottom:12px;">These tutors miss one or two compatibility rules.</p>
+        <div class="cards-grid-2">
+          {% for m in almost_matches %}
+            {% set t = m.tutor %}
+            <div class="match-card">
+              <div class="card-header-row">
+                <div class="person-meta">
+                  <div class="avatar">{{ initials(t.name) }}</div>
+                  <div>
+                    <div class="person-name">{{ t.name }}</div>
+                    <div class="person-sub">{{ t.course }}, Year {{ t.grade_level }} · Peer tutor</div>
+                  </div>
+                </div>
+                <span class="pill pill-amber">{{ m.rules_met }}/4 Compatibility</span>
+              </div>
+
+              <div class="why-box">
+                <div class="why-title">How you compare</div>
+                <div class="why-rule">
+                  <span class="{{ 'ok' if m.subj_ok else 'miss' }}">{{ '✓' if m.subj_ok else '✕' }}</span>
+                  <strong>Subject:</strong> {{ 'Teaches ' + selected_need.subject_name.title() if m.subj_ok else 'Does not teach this subject' }}
+                </div>
+                <div class="why-rule">
+                  <span class="{{ 'ok' if m.time_ok else 'miss' }}">{{ '✓' if m.time_ok else '✕' }}</span>
+                  <strong>Schedule:</strong> {{ 'Shared free time available' if m.time_ok else 'No shared free time yet' }}
+                </div>
+                <div class="why-rule">
+                  <span class="{{ 'ok' if m.lang_ok else 'miss' }}">{{ '✓' if m.lang_ok else '✕' }}</span>
+                  <strong>Language:</strong> {{ 'Shared language' if m.lang_ok else 'Speaks ' + (m.languages|join(', ') or 'different language') }}
+                </div>
+              </div>
+
+              <div class="card-actions">
+                <a href="{{ url_for('tutor_profile', tutor_id=t.tutor_id) }}" class="btn btn-outline btn-sm">View profile</a>
+                <a href="{{ url_for('calendar_page') }}" class="btn btn-ghost btn-sm">Adjust schedule</a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="card">
+        <h2 style="margin:0 0 6px 0; font-size:18px; color:var(--ink);">Add a subject to find compatible tutors</h2>
+        <p style="margin:0; color:var(--muted);">Use the panel on the left to pick a subject you need help with.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Request Tutoring Modal -->
+<div class="modal-backdrop" id="requestModal">
+  <div class="modal-box">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 style="margin:0; font-size:18px; font-weight:800; color:var(--ink);">Request tutoring with <span id="modalTutorName"></span></h3>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="closeRequestModal()">✕</button>
+    </div>
+    <form action="{{ url_for('request_session_route') }}" method="post">
+      <input type="hidden" name="tutor_id" id="modalTutorId">
+      <input type="hidden" name="subject_id" id="modalSubjectId">
+      <div class="form-group">
+        <label class="form-label">Pick a shared time slot</label>
+        <select name="slot" id="modalSlotSelect" class="form-control" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message / topic (optional)</label>
+        <textarea name="note" class="form-control" rows="3" placeholder="What would you like to focus on?"></textarea>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost" onclick="closeRequestModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Send request</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openRequestModal(tutorId, tutorName, subjectId, slots) {
+  document.getElementById('modalTutorId').value = tutorId;
+  document.getElementById('modalSubjectId').value = subjectId;
+  document.getElementById('modalTutorName').textContent = tutorName;
+  const sel = document.getElementById('modalSlotSelect');
+  sel.innerHTML = '';
+  slots.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = `${s.date}|${s.start}|${s.end}`;
+    opt.textContent = s.label;
+    sel.appendChild(opt);
+  });
+  document.getElementById('requestModal').classList.add('open');
+}
+function closeRequestModal() {
+  document.getElementById('requestModal').classList.remove('open');
+}
+</script>
+{% endblock %}

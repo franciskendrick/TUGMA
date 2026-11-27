@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}How the matching works — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">How the matching works</h1>
+<p class="page-subtitle">For presentations and grading. Everything here is produced by the Discrete Structures pipeline.</p>
+
+<div class="card" style="margin-bottom:18px;">
+  <ol style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; color:var(--ink);">
+    <li><strong>Check every tutor–student pair.</strong> A pair is compatible when <code>SubjectMatch ∧ TimeMatch ∧ LanguageMatch ∧ NotSelf</code> are all true.</li>
+    <li><strong>Draw a bipartite graph.</strong> Tutors on the left, students on the right, an edge whenever a pair is compatible.</li>
+    <li><strong>Pick the best set of edges.</strong> Give as many students as possible a tutor, never more than one tutor per student and never more than a tutor's limit.</li>
+  </ol>
+</div>
+
+<div class="stats-grid-4" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+  <div class="stat-card"><div class="stat-num">{{ total_pairs }}</div><div class="stat-label">Pairs checked (|T × S|)</div></div>
+  <div class="stat-card"><div class="stat-num">{{ rel_count }}</div><div class="stat-label">Compatible pairs (|R|)</div></div>
+  <div class="stat-card"><div class="stat-num">{{ match_count }}</div><div class="stat-label">Students matched (|M|)</div></div>
+</div>
+
+<h2 class="section-title">Safety checks</h2>
+<div style="display:flex; flex-direction:column; gap:8px; margin-bottom:22px;">
+  {% for label, passed in checks %}
+    <div class="flash {{ 'flash-success' if passed else 'flash-error' }}">
+      {{ 'Passed:' if passed else 'Failed:' }} {{ label }}
+    </div>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">The bipartite graph, before and after</h2>
+<div class="cards-grid-2">
+  <div class="card">
+    <div style="font-weight:800; color:var(--ink); margin-bottom:10px;">Every compatible pair (Compatibility Graph)</div>
+    <img src="{{ url_for('admin_graph_png', kind='compatibility') }}" alt="Compatibility Graph" style="width:100%; height:auto; border-radius:10px;">
+  </div>
+  <div class="card">
+    <div style="font-weight:800; color:var(--ink); margin-bottom:10px;">The pairs chosen (Selected Matching)</div>
+    <img src="{{ url_for('admin_graph_png', kind='selected') }}" alt="Selected Matching Graph" style="width:100%; height:auto; border-radius:10px;">
+  </div>
+</div>
+{% endblock %}

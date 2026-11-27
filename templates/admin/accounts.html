@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Accounts</h1>
+<p class="page-subtitle">Manage user login status and verify peer tutors.</p>
+
+<h2 class="section-title">User accounts</h2>
+<div class="table-wrap" style="margin-bottom:20px;">
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for a in accounts %}
+        <tr>
+          <td><strong>{{ a.name }}</strong></td>
+          <td>{{ a.email }}</td>
+          <td>{{ a.role|title }}</td>
+          <td><span class="pill {{ 'pill-green' if a.is_active else 'pill-red' }}">{{ 'Active' if a.is_active else 'Disabled' }}</span></td>
+          <td>
+            {% if a.user_id != user.user_id %}
+              <form method="post" action="{{ url_for('admin_accounts') }}">
+                <input type="hidden" name="action" value="toggle_active">
+                <input type="hidden" name="target_user_id" value="{{ a.user_id }}">
+                <input type="hidden" name="active" value="{{ '0' if a.is_active else '1' }}">
+                <button type="submit" class="btn {{ 'btn-danger-outline' if a.is_active else 'btn-outline' }} btn-sm">
+                  {{ 'Disable' if a.is_active else 'Enable' }}
+                </button>
+              </form>
+            {% else %}
+              <span style="color:var(--muted); font-size:12px;">Current user</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 class="section-title">Tutor verification</h2>
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Tutor</th><th>Course &amp; Year</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for t in tutors %}
+        <tr>
+          <td><strong>{{ t.name }}</strong></td>
+          <td>{{ t.course }} · Year {{ t.grade_level }}</td>
+          <td><span class="pill {{ 'pill-green' if t.verified else 'pill-amber' }}">{{ 'Verified' if t.verified else 'Pending' }}</span></td>
+          <td>
+            <form method="post" action="{{ url_for('admin_accounts') }}">
+              <input type="hidden" name="action" value="toggle_verify">
+              <input type="hidden" name="tutor_id" value="{{ t.tutor_id }}">
+              <input type="hidden" name="verified" value="{{ '0' if t.verified else '1' }}">
+              <button type="submit" class="btn {{ 'btn-danger-outline' if t.verified else 'btn-primary' }} btn-sm">
+                {{ 'Unverify' if t.verified else 'Verify tutor' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

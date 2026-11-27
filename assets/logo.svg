@@ -1,0 +1,17 @@
+<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="300" height="300" rx="68" fill="#016139"/>
+<mask id="stroke0_825_10879" fill="white">
+<path d="M126 72C126 63.1634 133.163 56 142 56H238C246.837 56 254 63.1634 254 72V136C254 144.837 246.837 152 238 152H142C133.163 152 126 144.837 126 136V72Z"/>
+</mask>
+<path d="M142 152H238C246.837 152 254 144.837 254 136V72C254 63.1634 246.837 56 238 56H142C133.163 56 126 63.1634 126 72V136C126 144.837 133.163 152 142 152Z" stroke-width="12" stroke="white" mask="url(#stroke0_825_10879)"/>
+<rect x="60" y="150" width="40" height="96" rx="20" fill="white"/>
+<path d="M92 168L130 132" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<circle cx="79.36" cy="117.36" r="27.36" fill="white"/>
+<path d="M172 252C172 222 236 222 236 252" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<circle cx="204" cy="196" r="20.5" fill="white" stroke="white"/>
+<path d="M160 87H220M190 87V123" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" stroke="white" stroke-opacity="0.95"/>
+<circle cx="160" cy="87" r="8" fill="white"/>
+<circle cx="220" cy="87" r="8" fill="white"/>
+<circle cx="190" cy="123" r="8" fill="white"/>
+<circle cx="190" cy="87" r="10" fill="white"/>
+</svg>

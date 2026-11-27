@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Matches — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Matches</h1>
+<p class="page-subtitle">Each student is given at most one tutor, and no tutor is given more students than they agreed to take.</p>
+
+<h2 class="section-title">Who is matched with whom</h2>
+<div class="table-wrap" style="margin-bottom:20px;">
+  <table class="data-table">
+    <thead>
+      <tr><th>Student</th><th>Tutor</th><th>Shared Subject(s)</th><th>Possible Meeting Times</th></tr>
+    </thead>
+    <tbody>
+      {% for r in match_rows %}
+        <tr>
+          <td><strong>{{ r.student }}</strong></td>
+          <td>{{ r.tutor }}</td>
+          <td>{{ r.subjects }}</td>
+          <td>{{ r.times }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" style="color:var(--muted);">No matches generated.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 class="section-title">How busy is each tutor?</h2>
+<div class="table-wrap" style="margin-bottom:20px;">
+  <table class="data-table">
+    <thead>
+      <tr><th>Tutor</th><th>Assigned</th><th>Spots left</th><th>Max capacity</th></tr>
+    </thead>
+    <tbody>
+      {% for t in tutor_load %}
+        <tr>
+          <td><strong>{{ t.name }}</strong></td>
+          <td>{{ t.assigned }}</td>
+          <td>{{ t.remaining }}</td>
+          <td>{{ t.capacity }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 class="section-title">Students without a tutor</h2>
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Student</th><th>Why</th></tr></thead>
+    <tbody>
+      {% for u in unmatched_rows %}
+        <tr><td><strong>{{ u.name }}</strong></td><td>{{ u.reason }}</td></tr>
+      {% else %}
+        <tr><td colspan="2" style="color:var(--primary);">All students were matched!</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

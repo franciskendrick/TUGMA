@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Sessions — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Sessions</h1>
+<p class="page-subtitle">Requests still open, sessions coming up, and the ones that are over.</p>
+
+<div class="tab-bar">
+  <a href="{{ url_for('sessions_page', tab='pending') }}" class="tab-pill {{ 'active' if active_tab == 'pending' else '' }}">Pending</a>
+  <a href="{{ url_for('sessions_page', tab='upcoming') }}" class="tab-pill {{ 'active' if active_tab == 'upcoming' else '' }}">Upcoming</a>
+  <a href="{{ url_for('sessions_page', tab='history') }}" class="tab-pill {{ 'active' if active_tab == 'history' else '' }}">History</a>
+</div>
+
+{% if active_tab == 'pending' %}
+  {% set items = tabs.sent if mode == 'Learning' else tabs.reply %}
+  {% if items %}
+    <div class="cards-grid-2">
+      {% for s in items %}
+        {% set peer_name = s.tutor_name if mode == 'Learning' else s.student_name %}
+        {% set peer_course = s.tutor_course if mode == 'Learning' else s.student_course %}
+        <div class="match-card">
+          <div class="card-header-row">
+            <div class="person-meta">
+              <div class="avatar">{{ initials(peer_name) }}</div>
+              <div>
+                <div class="person-name">{{ peer_name }}</div>
+                <div class="person-sub">{{ 'Peer tutor' if mode == 'Learning' else 'Student' }}, {{ peer_course }}</div>
+              </div>
+            </div>
+            <span class="pill pill-amber">Pending</span>
+          </div>
+          <div class="meta-lines">
+            <div>{{ s.subject_name }}</div>
+            <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+          </div>
+          <div class="session-note-box">{{ s.note or ('Waiting for a reply' if mode == 'Learning' else 'No message attached') }}</div>
+          <div class="card-actions">
+            {% if mode == 'Learning' %}
+              <a href="{{ url_for('tutor_profile', tutor_id=s.tutor_id) }}" class="btn btn-outline btn-sm">View profile</a>
+              <form action="{{ url_for('cancel_session_route', session_id=s.session_id) }}" method="post">
+                <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Cancel request</button>
+              </form>
+            {% else %}
+              <form action="{{ url_for('respond_session_route', session_id=s.session_id) }}" method="post">
+                <input type="hidden" name="action" value="decline">
+                <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Decline</button>
+              </form>
+              <form action="{{ url_for('respond_session_route', session_id=s.session_id) }}" method="post">
+                <input type="hidden" name="action" value="accept">
+                <button type="submit" class="btn btn-primary btn-sm btn-full">Accept</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card" style="color:var(--muted);">No pending requests right now.</div>
+  {% endif %}
+
+{% elif active_tab == 'upcoming' %}
+  {% if tabs.upcoming %}
+    <div class="cards-grid-2">
+      {% for s in tabs.upcoming %}
+        {% set peer_name = s.tutor_name if mode == 'Learning' else s.student_name %}
+        {% set peer_course = s.tutor_course if mode == 'Learning' else s.student_course %}
+        <div class="match-card">
+          <div class="card-header-row">
+            <div class="person-meta">
+              <div class="avatar">{{ initials(peer_name) }}</div>
+              <div>
+                <div class="person-name">{{ peer_name }}</div>
+                <div class="person-sub">{{ 'Your tutor' if mode == 'Learning' else 'Your student' }}, {{ peer_course }}</div>
+              </div>
+            </div>
+            <span class="pill pill-green">Confirmed</span>
+          </div>
+          <div class="meta-lines">
+            <div>{{ s.subject_name }}</div>
+            <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+          </div>
+          {% if s.note %}<div class="session-note-box">{{ s.note }}</div>{% endif %}
+          <div class="card-actions">
+            <a href="{{ url_for('tutor_profile', tutor_id=s.tutor_id) if mode == 'Learning' else url_for('student_profile', student_id=s.student_id) }}" class="btn btn-outline btn-sm">View profile</a>
+            <form action="{{ url_for('cancel_session_route', session_id=s.session_id) }}" method="post">
+              <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Cancel session</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card" style="color:var(--muted);">No upcoming sessions yet.</div>
+  {% endif %}
+
+{% else %}
+  {% if tabs.past %}
+    <div class="cards-grid-2">
+      {% for s in tabs.past %}
+        {% set peer_name = s.tutor_name if mode == 'Learning' else s.student_name %}
+        {% set pill_cls = 'pill-red' if s.status in ('declined', 'cancelled') else 'pill-green' %}
+        <div class="match-card">
+          <div class="card-header-row">
+            <div class="person-meta">
+              <div class="avatar">{{ initials(peer_name) }}</div>
+              <div>
+                <div class="person-name">{{ peer_name }}</div>
+                <div class="person-sub">{{ s.subject_name }}</div>
+              </div>
+            </div>
+            <span class="pill {{ pill_cls }}">{{ s.status|title }}</span>
+          </div>
+          <div class="meta-lines">
+            <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+          </div>
+          <div class="card-actions">
+            <a href="{{ url_for('tutor_profile', tutor_id=s.tutor_id) if mode == 'Learning' else url_for('student_profile', student_id=s.student_id) }}" class="btn btn-outline btn-sm">View profile</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card" style="color:var(--muted);">No past sessions yet.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block right_rail %}
+<aside class="right-rail">
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">Your sessions</strong>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+      <div><strong>{{ tabs.reply|length if mode == 'Tutoring' else tabs.sent|length }}</strong> pending</div>
+      <div><strong>{{ tabs.upcoming|length }}</strong> upcoming session(s)</div>
+      <div><strong>{{ tabs.past|length }}</strong> in history</div>
+    </div>
+  </div>
+  {% if mode == 'Learning' %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:6px;">Need help with a class?</strong>
+    <p style="margin:0 0 12px 0; font-size:12.5px; color:var(--muted);">Browse peer tutors and send a request in a few clicks.</p>
+    <a href="{{ url_for('classes_page') }}" class="btn btn-primary btn-sm btn-full">Find a tutor</a>
+  </div>
+  {% endif %}
+</aside>
+{% endblock %}

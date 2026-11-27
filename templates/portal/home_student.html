@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Student Overview — TUGMA{% endblock %}
+
+{% block content %}
+<div class="greeting-text">Good day, {{ student.name.split()[0] }}</div>
+<h1 class="page-title" style="margin-bottom: 18px;">Student Overview</h1>
+
+<div class="stats-grid-4">
+  <div class="stat-card">
+    <div class="stat-num">{{ needs|length }}</div>
+    <div class="stat-label">Subjects I need help with</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ tabs.upcoming|length }}</div>
+    <div class="stat-label">Upcoming sessions</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num {{ 'accent' if tabs.sent|length > 0 else '' }}">{{ tabs.sent|length }}</div>
+    <div class="stat-label">Pending requests</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ matched_tutors|length }}</div>
+    <div class="stat-label">Compatible tutors</div>
+  </div>
+</div>
+
+<h2 class="section-title">Top Match</h2>
+{% if matched_tutors %}
+  <div class="cards-grid-2">
+    {% for item in matched_tutors %}
+      {% set t = item.profile %}
+      <div class="match-card">
+        <div class="card-header-row">
+          <div class="person-meta">
+            <div class="avatar">{{ initials(t.name) }}</div>
+            <div>
+              <div class="person-name">{{ t.name }}</div>
+              <div class="person-sub">{{ t.course }}, Year {{ t.grade_level }} · Peer Tutor</div>
+              {% if item.rating.overall %}
+                <div class="person-sub" style="color: var(--ink); font-weight: 700;">★ {{ item.rating.overall }} ({{ item.rating.rated_sessions }} sessions)</div>
+              {% endif %}
+            </div>
+          </div>
+          <span class="pill pill-green">4/4 Compatibility</span>
+        </div>
+
+        <div class="why-box">
+          <div class="why-title">Why you matched</div>
+          <div class="why-rule"><span class="ok">✓</span> <strong>Subject:</strong> {{ item.shared_subjects|join(', ') or 'Compatible subject' }}</div>
+          <div class="why-rule"><span class="ok">✓</span> <strong>Schedule:</strong> Both free {{ item.slots|map('fmt_range')|join(', ') if item.slots else 'this week' }}</div>
+          <div class="why-rule"><span class="ok">✓</span> <strong>Language:</strong> Shared language preference</div>
+          <div class="why-rule"><span class="ok">✓</span> <strong>Capacity:</strong> Has room for {{ item.remaining_spots }} more student(s)</div>
+        </div>
+
+        {% if item.slots %}
+          <div class="slot-chips">
+            {% for sl in item.slots[:3] %}
+              <span class="slot-chip">{{ fmt_range(sl) }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="card-actions">
+          <a href="{{ url_for('tutor_profile', tutor_id=item.tutor_id) }}" class="btn btn-outline btn-sm">View profile</a>
+          <a href="{{ url_for('classes_page') }}" class="btn btn-primary btn-sm">Request tutoring</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <p style="margin:0 0 12px 0; color: var(--muted);">No full 4/4 tutor matches yet. Add a subject you need help with or update your free schedule.</p>
+    <a href="{{ url_for('classes_page') }}" class="btn btn-primary btn-sm">Match with Tutor</a>
+  </div>
+{% endif %}
+
+<h2 class="section-title">Upcoming sessions</h2>
+{% if tabs.upcoming %}
+  <div class="cards-grid-2">
+    {% for s in tabs.upcoming %}
+      <div class="match-card">
+        <div class="card-header-row">
+          <div class="person-meta">
+            <div class="avatar">{{ initials(s.tutor_name) }}</div>
+            <div>
+              <div class="person-name">{{ s.tutor_name }}</div>
+              <div class="person-sub">Your tutor, {{ s.tutor_course }}</div>
+            </div>
+          </div>
+          <span class="pill pill-green">Confirmed</span>
+        </div>
+        <div class="meta-lines">
+          <div>{{ s.subject_name }}</div>
+          <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+        </div>
+        <div class="card-actions">
+          <a href="{{ url_for('tutor_profile', tutor_id=s.tutor_id) }}" class="btn btn-outline btn-sm">View profile</a>
+          <form action="{{ url_for('cancel_session_route', session_id=s.session_id) }}" method="post">
+            <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Cancel session</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="color: var(--muted);">
+    No upcoming sessions yet.
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block right_rail %}
+<aside class="right-rail">
+  <div class="card">
+    <div class="person-meta" style="margin-bottom: 14px;">
+      <div class="avatar">{{ initials(student.name) }}</div>
+      <div>
+        <div class="person-name" style="font-size: 14.5px;">{{ student.name }}</div>
+        <div class="person-sub">{{ student.course }}, Year {{ student.grade_level }}</div>
+        <span class="pill pill-green" style="margin-top: 4px;">Student Mode</span>
+      </div>
+    </div>
+    <a href="{{ url_for('my_profile') }}" class="btn btn-outline btn-sm btn-full">View my profile</a>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong style="color: var(--ink);">Calendar</strong>
+      <span style="font-size: 12px; color: var(--muted);">{{ today }}</span>
+    </div>
+    <div class="mini-cal-grid">
+      <div class="mini-cal-head">S</div><div class="mini-cal-head">M</div><div class="mini-cal-head">T</div>
+      <div class="mini-cal-head">W</div><div class="mini-cal-head">T</div><div class="mini-cal-head">F</div><div class="mini-cal-head">S</div>
+      {% for d in range(1, 31) %}
+        <div class="mini-cal-day {{ 'today' if d == 27 else '' }}">{{ d }}</div>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('calendar_page') }}" class="btn btn-outline btn-sm btn-full" style="margin-top: 12px;">Open full calendar</a>
+  </div>
+</aside>
+{% endblock %}

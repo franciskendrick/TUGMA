@@ -11,11 +11,11 @@
 import sqlite3
 from collections import Counter
 from datetime import time
+from functools import lru_cache
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import streamlit as st
 
 from services.auth_service import (
     AuthError,
@@ -124,7 +124,7 @@ def short_names(people):
     return {pid: (f"{l} ({pid})" if counts[l] > 1 else l) for pid, l in labels.items()}
 
 
-@st.cache_data(show_spinner="Running the TUGMA pipeline...")
+@lru_cache(maxsize=8)
 def run_pipeline(db_mtime, capacity_mode, uniform_capacity):
     """Run the full pipeline. `db_mtime` only invalidates the cache."""
     svc = Services()

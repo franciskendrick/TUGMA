@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% set p = pdata.profile %}
+{% block title %}{{ p.name }} — Profile — TUGMA{% endblock %}
+
+{% block content %}
+<div class="profile-hero">
+  <div class="profile-banner">
+    <span class="pill" style="background:rgba(5,48,31,0.75); color:#fff;">
+      {{ 'Peer Tutor' if kind == 'tutor' else 'Student' }}
+    </span>
+  </div>
+  <div class="profile-hero-body">
+    <div class="profile-hero-left">
+      <div class="avatar avatar-lg">{{ initials(p.name) }}</div>
+      <div>
+        <div class="profile-hero-name">{{ p.name }}</div>
+        <div style="font-size:13px; color:var(--primary); font-weight:700;">De La Salle University – Dasmariñas</div>
+        <div style="font-size:12.5px; color:var(--muted); margin-top:2px;">{{ p.course }}, Year {{ p.grade_level }}</div>
+        <span class="pill pill-green" style="margin-top:6px;">
+          {% if kind == 'tutor' %}
+            {{ '✓ Verified tutor' if p.verified else 'Pending verification' }}
+          {% else %}
+            ✓ Verified student
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    {% if kind == 'tutor' and pdata.rating.overall %}
+      <div style="text-align:right;">
+        <div style="font-size:24px; font-weight:800; color:var(--ink);">{{ pdata.rating.overall }} / 5</div>
+        <div style="font-size:12px; color:var(--muted);">{{ pdata.rating.rated_sessions }} rated sessions</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% set prof_url = url_for('tutor_profile', tutor_id=p.tutor_id) if kind == 'tutor' else url_for('student_profile', student_id=p.student_id) %}
+<div class="tab-bar">
+  <a href="{{ prof_url }}?tab=about" class="tab-pill {{ 'active' if tab == 'about' else '' }}">About</a>
+  <a href="{{ prof_url }}?tab=info" class="tab-pill {{ 'active' if tab == 'info' else '' }}">Info</a>
+  <a href="{{ prof_url }}?tab=classes" class="tab-pill {{ 'active' if tab == 'classes' else '' }}">Classes</a>
+</div>
+
+{% if tab == 'about' %}
+  <div class="card" style="margin-bottom:14px;">
+    <strong style="color:var(--ink); display:block; margin-bottom:8px;">About</strong>
+    <p style="margin:0; color:var(--body);">
+      {{ p.bio or (p.name + ' is a ' + p.course + ' (Year ' + p.grade_level|string + ') member at De La Salle University – Dasmariñas.') }}
+    </p>
+  </div>
+
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">Preferences &amp; Study Info</strong>
+    <div style="display:grid; grid-template-columns: 160px 1fr; gap:8px 16px; font-size:13px;">
+      <div style="color:var(--muted);">Languages</div>
+      <div><strong>{{ (tutor_languages if kind == 'tutor' else pdata.languages)|join(', ') or 'Not set' }}</strong></div>
+      {% if kind == 'student' %}
+        <div style="color:var(--muted);">Learning style</div>
+        <div><strong>{{ p.learning_style or '—' }}</strong></div>
+        <div style="color:var(--muted);">Preferred setup</div>
+        <div><strong>{{ p.preferred_setup or 'Online or face-to-face' }}</strong></div>
+      {% else %}
+        <div style="color:var(--muted);">Student capacity</div>
+        <div><strong>{{ p.capacity }} students</strong></div>
+      {% endif %}
+    </div>
+  </div>
+
+{% elif tab == 'info' %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:4px;">Personal info</strong>
+    <p style="margin:0 0 14px 0; font-size:12.5px; color:var(--muted);">Other users only see your name, program, year level, subjects, and free time.</p>
+    <div style="display:grid; grid-template-columns: 160px 1fr; gap:10px 16px; font-size:13.5px;">
+      <div style="color:var(--muted);">Full name</div><div><strong>{{ p.name }}</strong></div>
+      <div style="color:var(--muted);">Program</div><div><strong>{{ p.course }}</strong></div>
+      <div style="color:var(--muted);">Year level</div><div><strong>Year {{ p.grade_level }}</strong></div>
+      {% if owner_user %}
+        <div style="color:var(--muted);">School email</div><div><strong>{{ owner_user.email }}</strong></div>
+      {% endif %}
+    </div>
+  </div>
+
+{% else %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:12px;">
+      {{ 'Tutoring subjects & availability' if kind == 'tutor' else 'Registered subjects & weekly schedule' }}
+    </strong>
+    {% if kind == 'tutor' %}
+      <ul style="margin:0 0 16px 18px;">
+        {% for s in tutor_subjects %}
+          <li><strong>{{ s.subject_code }}</strong> — {{ s.subject_name.title() }}</li>
+        {% else %}
+          <li style="color:var(--muted);">No subjects listed.</li>
+        {% endfor %}
+      </ul>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Day</th><th>Available</th></tr></thead>
+          <tbody>
+            {% for a in tutor_availability %}
+              <tr><td>{{ a.day }}</td><td>{{ fmt12(a.start_time) }} – {{ fmt12(a.end_time) }}</td></tr>
+            {% else %}
+              <tr><td colspan="2" style="color:var(--muted);">No availability set.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <ul style="margin:0 0 16px 18px;">
+        {% for s in pdata.subjects %}
+          <li><strong>{{ s.subject_code }}</strong> — {{ s.subject_name.title() }}</li>
+        {% else %}
+          <li style="color:var(--muted);">No subjects listed.</li>
+        {% endfor %}
+      </ul>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Day</th><th>Time</th><th>Subject</th></tr></thead>
+          <tbody>
+            {% for sc in pdata.schedule %}
+              <tr><td>{{ sc.day }}</td><td>{{ fmt12(sc.start_time) }} – {{ fmt12(sc.end_time) }}</td><td>{{ sc.subject_code }}</td></tr>
+            {% else %}
+              <tr><td colspan="3" style="color:var(--muted);">No classes scheduled.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block right_rail %}
+<aside class="right-rail">
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:12px;">Account</strong>
+    {% if owner_user %}
+      <div style="font-size:12.5px; color:var(--muted); margin-bottom:10px;">
+        <div>Joined {{ owner_user.created_at[:10] }}</div>
+        <div style="margin-top:4px;">{{ owner_user.email }}</div>
+      </div>
+    {% endif %}
+    {% if is_own %}
+      <form action="{{ url_for('logout') }}" method="post">
+        <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Log out</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if is_own %}
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">Languages</strong>
+    {% set current_langs = tutor_languages if kind == 'tutor' else pdata.languages %}
+    <form action="{{ url_for('update_profile_settings') }}" method="post">
+      {% for lang in LANGUAGES %}
+        <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:13px;">
+          <input type="checkbox" name="languages" value="{{ lang }}" {{ 'checked' if lang in current_langs else '' }}>
+          {{ lang }}
+        </label>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary btn-sm btn-full" style="margin-top:8px;">Save languages</button>
+    </form>
+  </div>
+  {% endif %}
+</aside>
+{% endblock %}

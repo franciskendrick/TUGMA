@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Tutor Overview — TUGMA{% endblock %}
+
+{% block content %}
+<div class="greeting-text">Good day, {{ tutor.name.split()[0] }}</div>
+<h1 class="page-title" style="margin-bottom: 18px;">Tutor Overview</h1>
+
+{% if not tutor.verified %}
+  <div class="flash flash-error" style="margin-bottom: 16px;">
+    Your tutor profile is pending administrator verification. You will appear in student matches once verified.
+  </div>
+{% endif %}
+
+<div class="stats-grid-4">
+  <div class="stat-card">
+    <div class="stat-num">{{ teaches|length }}</div>
+    <div class="stat-label">Subjects I teach</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num {{ 'accent' if tabs.reply|length > 0 else '' }}">{{ tabs.reply|length }}</div>
+    <div class="stat-label">Requests to answer</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ tabs.upcoming|length }}</div>
+    <div class="stat-label">Upcoming sessions</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ taken }} / {{ tutor.capacity }}</div>
+    <div class="stat-label">Students / capacity</div>
+  </div>
+</div>
+
+<h2 class="section-title">Requests waiting for your reply</h2>
+{% if tabs.reply %}
+  <div class="cards-grid-2">
+    {% for s in tabs.reply %}
+      <div class="match-card">
+        <div class="card-header-row">
+          <div class="person-meta">
+            <div class="avatar">{{ initials(s.student_name) }}</div>
+            <div>
+              <div class="person-name">{{ s.student_name }}</div>
+              <div class="person-sub">{{ s.student_course }}</div>
+            </div>
+          </div>
+          <span class="pill pill-amber">Pending</span>
+        </div>
+        <div class="meta-lines">
+          <div>{{ s.subject_name }}</div>
+          <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+        </div>
+        {% if s.note %}
+          <div class="session-note-box">{{ s.note }}</div>
+        {% endif %}
+        <div class="card-actions">
+          <form action="{{ url_for('respond_session_route', session_id=s.session_id) }}" method="post">
+            <input type="hidden" name="action" value="decline">
+            <button type="submit" class="btn btn-danger-outline btn-sm btn-full">Decline</button>
+          </form>
+          <form action="{{ url_for('respond_session_route', session_id=s.session_id) }}" method="post">
+            <input type="hidden" name="action" value="accept">
+            <button type="submit" class="btn btn-primary btn-sm btn-full">Accept</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="color: var(--muted);">No pending requests right now.</div>
+{% endif %}
+
+<h2 class="section-title">Upcoming sessions</h2>
+{% if tabs.upcoming %}
+  <div class="cards-grid-2">
+    {% for s in tabs.upcoming %}
+      <div class="match-card">
+        <div class="card-header-row">
+          <div class="person-meta">
+            <div class="avatar">{{ initials(s.student_name) }}</div>
+            <div>
+              <div class="person-name">{{ s.student_name }}</div>
+              <div class="person-sub">{{ s.student_course }}</div>
+            </div>
+          </div>
+          <span class="pill pill-green">Confirmed</span>
+        </div>
+        <div class="meta-lines">
+          <div>{{ s.subject_name }}</div>
+          <div>{{ s.session_date }} · {{ fmt12(s.start_time) }} – {{ fmt12(s.end_time) }}</div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="color: var(--muted);">No upcoming sessions yet.</div>
+{% endif %}
+{% endblock %}
+
+{% block right_rail %}
+<aside class="right-rail">
+  <div class="card">
+    <div class="person-meta" style="margin-bottom: 14px;">
+      <div class="avatar">{{ initials(tutor.name) }}</div>
+      <div>
+        <div class="person-name" style="font-size: 14.5px;">{{ tutor.name }}</div>
+        <div class="person-sub">{{ tutor.course }}, Year {{ tutor.grade_level }}</div>
+        <span class="pill pill-green" style="margin-top: 4px;">Tutor Mode</span>
+      </div>
+    </div>
+    <a href="{{ url_for('my_profile') }}" class="btn btn-outline btn-sm btn-full">View my profile</a>
+  </div>
+
+  <div class="card">
+    <strong style="color: var(--ink); display:block; margin-bottom:10px;">Quick Tutor Settings</strong>
+    <form action="{{ url_for('update_profile_settings') }}" method="post">
+      <div class="form-group">
+        <label class="form-label">Max students I can take</label>
+        <input type="number" name="capacity" class="form-control" min="1" max="50" value="{{ tutor.capacity }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm btn-full">Save capacity</button>
+    </form>
+  </div>
+</aside>
+{% endblock %}

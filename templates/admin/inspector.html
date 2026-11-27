@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Predicate Inspector — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Can these two match?</h1>
+<p class="page-subtitle">Inspect the four Propositional &amp; Predicate Logic conditions for any tutor–student pair.</p>
+
+<div class="card" style="margin-bottom:18px;">
+  <form method="get" action="{{ url_for('admin_inspector') }}" style="display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; align-items:end;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Tutor (t ∈ T)</label>
+      <select name="tutor_id" class="form-control">
+        {% for t in tutors %}
+          <option value="{{ t.tutor_id }}" {{ 'selected' if t.tutor_id == selected_tid else '' }}>{{ t.name }} ({{ t.course }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Student (s ∈ S)</label>
+      <select name="student_id" class="form-control">
+        {% for s in students %}
+          <option value="{{ s.student_id }}" {{ 'selected' if s.student_id == selected_sid else '' }}>{{ s.name }} ({{ s.course }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Evaluate</button>
+  </form>
+</div>
+
+{% if report %}
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div>
+        <strong style="font-size:16px; color:var(--ink);">Compatible(t, s)</strong>
+        <div style="font-size:12.5px; color:var(--muted);">SubjectMatch(t, s) ∧ TimeMatch(t, s) ∧ LanguageMatch(t, s) ∧ NotSelf(t, s)</div>
+      </div>
+      <span class="pill {{ 'pill-green' if report.compatible else 'pill-red' }}" style="font-size:13px; padding:6px 14px;">
+        {{ 'TRUE — Compatible' if report.compatible else 'FALSE — Incompatible' }}
+      </span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div style="padding:12px 14px; border-radius:10px; background: {{ 'var(--pill-green-bg)' if report.subject_match else 'var(--danger-bg)' }};">
+        <strong>SubjectMatch(t, s):</strong> {{ 'True' if report.subject_match else 'False' }}
+        {% if report.shared_subjects %} — Shared: {{ report.shared_subjects|join(', ') }}{% endif %}
+      </div>
+      <div style="padding:12px 14px; border-radius:10px; background: {{ 'var(--pill-green-bg)' if report.time_match else 'var(--danger-bg)' }};">
+        <strong>TimeMatch(t, s):</strong> {{ 'True' if report.time_match else 'False' }}
+        {% if report.shared_slots %} — {{ report.shared_slots|length }} overlapping slot(s){% endif %}
+      </div>
+      <div style="padding:12px 14px; border-radius:10px; background: {{ 'var(--pill-green-bg)' if report.language_match else 'var(--danger-bg)' }};">
+        <strong>LanguageMatch(t, s):</strong> {{ 'True' if report.language_match else 'False' }}
+        {% if report.shared_languages %} — Shared: {{ report.shared_languages|join(', ') }}{% endif %}
+      </div>
+      <div style="padding:12px 14px; border-radius:10px; background: {{ 'var(--pill-green-bg)' if report.not_self else 'var(--danger-bg)' }};">
+        <strong>NotSelf(t, s):</strong> {{ 'True' if report.not_self else 'False' }}
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

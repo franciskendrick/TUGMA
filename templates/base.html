@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TUGMA — Peer Tutoring at DLSU-D{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tugma.css') }}">
+</head>
+<body>
+  {% block body %}
+  <!-- Top Bar -->
+  <header class="topbar">
+    <a href="{{ url_for('admin_home' if user and user.role == 'admin' else 'home') }}" class="brand-link">
+      <img src="{{ url_for('serve_assets', filename='logo.png') }}" alt="TUGMA" class="brand-logo">
+      <div class="brand-text-wrap">
+        <span class="brand-title">TUGMA</span>
+        <span class="brand-sub">Peer tutoring at DLSU-D</span>
+      </div>
+    </a>
+
+    {% if user and user.role == 'member' %}
+    <form class="topbar-search" action="{{ url_for('people_page') }}" method="get">
+      <img src="{{ url_for('serve_assets', filename='icons/Search Icon/20/Ink.svg') }}" alt="" class="search-icon">
+      <input type="text" name="q" placeholder="Search people or subjects" value="{{ request.args.get('q', '') }}">
+    </form>
+    {% else %}
+    <div style="flex:1;"></div>
+    {% endif %}
+
+    <div class="topbar-right">
+      {% if user and user.role == 'member' %}
+        <form action="{{ url_for('switch_mode') }}" method="post" class="mode-toggle">
+          <button type="submit" name="mode" value="Learning" class="{{ 'active' if mode == 'Learning' else '' }}">Student</button>
+          <button type="submit" name="mode" value="Tutoring" class="{{ 'active' if mode == 'Tutoring' else '' }}">Tutor</button>
+        </form>
+
+        <a href="{{ url_for('sessions_page', tab='pending') }}" class="icon-btn" title="Session notifications">
+          <img src="{{ url_for('serve_assets', filename='icons/Bell Icon/20/Ink.svg') }}" alt="Notifications" width="18" height="18" onerror="this.style.display='none'">
+          {% if notif_count > 0 %}
+            <span class="notif-badge">{{ notif_count }}</span>
+          {% endif %}
+        </a>
+
+        <a href="{{ url_for('calendar_page') }}" class="icon-btn" title="Calendar">
+          <img src="{{ url_for('serve_assets', filename='icons/Calendar Icon/18/Dark Green.svg') }}" alt="Calendar" width="18" height="18" onerror="this.style.display='none'">
+        </a>
+
+        <a href="{{ url_for('my_profile') }}" class="user-chip">
+          <span>{{ user.name }}</span>
+          <span class="avatar avatar-sm">{{ initials(user.name) }}</span>
+        </a>
+      {% elif user and user.role == 'admin' %}
+        <span class="pill pill-green">Administrator</span>
+        <span class="user-chip">
+          <span>{{ user.name }}</span>
+          <span class="avatar avatar-sm">{{ initials(user.name) }}</span>
+        </span>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div>
+        <div class="viewing-as-card">
+          <div>
+            <div class="viewing-as-label">VIEWING AS</div>
+            <div class="viewing-as-val">
+              {% if user and user.role == 'admin' %}
+                Administrator
+              {% elif mode == 'Tutoring' %}
+                Tutor
+              {% else %}
+                Student
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          {% if user and user.role == 'admin' %}
+            {% set ep = request.endpoint %}
+            <a href="{{ url_for('admin_home') }}" class="nav-item {{ 'active' if ep == 'admin_home' else '' }}">Home</a>
+            <a href="{{ url_for('admin_matches') }}" class="nav-item {{ 'active' if ep == 'admin_matches' else '' }}">Matches</a>
+            <a href="{{ url_for('admin_people') }}" class="nav-item {{ 'active' if ep == 'admin_people' else '' }}">People</a>
+            <a href="{{ url_for('admin_inspector') }}" class="nav-item {{ 'active' if ep == 'admin_inspector' else '' }}">Can these two match?</a>
+            <a href="{{ url_for('admin_accounts') }}" class="nav-item {{ 'active' if ep == 'admin_accounts' else '' }}">Accounts</a>
+            <a href="{{ url_for('admin_settings') }}" class="nav-item {{ 'active' if ep == 'admin_settings' else '' }}">Settings</a>
+            <a href="{{ url_for('admin_matching_works') }}" class="nav-item {{ 'active' if ep == 'admin_matching_works' else '' }}">How the matching works</a>
+          {% else %}
+            {% set ep = request.endpoint %}
+            <a href="{{ url_for('home') }}" class="nav-item {{ 'active' if ep == 'home' else '' }}">
+              <span>Home</span>
+            </a>
+            <a href="{{ url_for('classes_page') }}" class="nav-item {{ 'active' if ep == 'classes_page' else '' }}">
+              <span>{{ 'Match with Tutor' if mode == 'Learning' else 'Classes' }}</span>
+            </a>
+            <a href="{{ url_for('calendar_page') }}" class="nav-item {{ 'active' if ep == 'calendar_page' else '' }}">
+              <span>Calendar</span>
+            </a>
+            <a href="{{ url_for('sessions_page') }}" class="nav-item {{ 'active' if ep == 'sessions_page' else '' }}">
+              <span>Sessions</span>
+            </a>
+            <a href="{{ url_for('people_page') }}" class="nav-item {{ 'active' if ep == 'people_page' else '' }}">
+              <span>People</span>
+            </a>
+          {% endif %}
+        </nav>
+      </div>
+
+      <div class="sidebar-footer">
+        {% if user and user.role == 'admin' %}
+          <form action="{{ url_for('logout') }}" method="post">
+            <button type="submit" class="nav-item" style="width:100%; border:none; background:none; cursor:pointer; text-align:left;">Log out</button>
+          </form>
+        {% else %}
+          <a href="{{ url_for('help_page') }}" class="nav-item {{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
+        {% endif %}
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <div class="main-column">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack">
+              {% for cat, msg in messages %}
+                <div class="flash flash-{{ cat }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
+
+      {% block right_rail %}{% endblock %}
+    </main>
+  </div>
+  {% endblock %}
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

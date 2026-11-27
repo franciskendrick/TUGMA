@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}TUGMA — Find the peer tutor who fits your schedule{% endblock %}
+{% block body %}
+<header class="topbar">
+  <a href="{{ url_for('index') }}" class="brand-link">
+    <img src="{{ url_for('serve_assets', filename='logo.png') }}" alt="TUGMA" class="brand-logo">
+    <div class="brand-text-wrap">
+      <span class="brand-title">TUGMA</span>
+      <span class="brand-sub">Peer tutoring at DLSU-D</span>
+    </div>
+  </a>
+  <div class="topbar-right">
+    <a href="{{ url_for('login_page') }}" class="btn btn-primary btn-sm">Login</a>
+  </div>
+</header>
+
+<section style="background: linear-gradient(110deg, rgba(5,48,31,0.92), rgba(0,72,42,0.82)); color: #fff; padding: 64px 48px;">
+  <div style="max-width: 1120px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 40px; flex-wrap: wrap;">
+    <div style="max-width: 560px;">
+      <div style="font-size: 13px; font-weight: 700; color: #D4E9DD; margin-bottom: 10px;">Find your perfect study match</div>
+      <h1 style="font-size: 46px; font-weight: 800; line-height: 1.08; margin: 0 0 14px 0; letter-spacing: -0.03em;">Find the peer tutor who fits your schedule.</h1>
+      <p style="font-size: 15px; color: rgba(255,255,255,0.88); margin: 0 0 26px 0;">Matched by subject, free time, and language — made for DLSU-D students.</p>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="{{ url_for('register_page') }}" class="btn" style="background: #fff; color: #00482A;">Get started</a>
+        <a href="{{ url_for('login_page') }}" class="btn" style="border: 1.5px solid rgba(255,255,255,0.65); color: #fff;">Login to Access More</a>
+      </div>
+    </div>
+    <div style="text-align: center;">
+      <img src="{{ url_for('serve_assets', filename='logo.png') }}" alt="TUGMA" style="width: 112px; height: 112px; border-radius: 24px; background: #007041; padding: 14px;">
+      <div style="font-size: 32px; font-weight: 800; letter-spacing: 0.04em; margin-top: 10px;">TUGMA</div>
+      <div style="font-size: 11px; letter-spacing: 0.14em; color: rgba(255,255,255,0.8);">TUTOR-STUDENT UNIFIED<br>GRAPH-BASED MATCHING APPROACH</div>
+    </div>
+  </div>
+</section>
+
+<section style="max-width: 1120px; margin: 36px auto; padding: 0 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+  <div class="card">
+    <div class="pill pill-green" style="margin-bottom: 12px;">Step 1</div>
+    <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: var(--ink);">Pick your classes</h3>
+    <p style="margin: 0; font-size: 13px; color: var(--muted);">Tell us the courses you need help with — Discrete Math, Data Structures, Java, and more.</p>
+  </div>
+  <div class="card">
+    <div class="pill pill-green" style="margin-bottom: 12px;">Step 2</div>
+    <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: var(--ink);">Share your free time</h3>
+    <p style="margin: 0; font-size: 13px; color: var(--muted);">Mark your free blocks on the calendar once. Tutors and students see when you are both available.</p>
+  </div>
+  <div class="card">
+    <div class="pill pill-green" style="margin-bottom: 12px;">Step 3</div>
+    <h3 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: var(--ink);">Get matched</h3>
+    <p style="margin: 0; font-size: 13px; color: var(--muted);">See which matching rules you meet, then book a session in a few clicks.</p>
+  </div>
+</section>
+
+<footer style="background: var(--forest); color: rgba(255,255,255,0.88); padding: 18px 36px; margin-top: 64px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+  <div style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px;">
+    <img src="{{ url_for('serve_assets', filename='logo.png') }}" alt="" style="width: 28px; height: 28px; border-radius: 6px;">
+    TUGMA
+  </div>
+  <div style="font-size: 12px; color: rgba(255,255,255,0.75);">
+    De La Salle University – Dasmariñas · Discrete Structures 1 &amp; HCI Prototype
+  </div>
+</footer>
+{% endblock %}

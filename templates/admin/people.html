@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}People — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">People</h1>
+<p class="page-subtitle">All registered students and tutors in the current dataset.</p>
+
+<div class="tab-bar">
+  <a href="{{ url_for('admin_people', kind='students') }}" class="tab-pill {{ 'active' if kind == 'students' else '' }}">Students</a>
+  <a href="{{ url_for('admin_people', kind='tutors') }}" class="tab-pill {{ 'active' if kind == 'tutors' else '' }}">Tutors</a>
+</div>
+
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      {% if kind == 'students' %}
+        <tr><th>Name</th><th>Course</th><th>Year</th><th>Needs help with</th><th>Languages</th></tr>
+      {% else %}
+        <tr><th>Name</th><th>Course</th><th>Year</th><th>Teaches</th><th>Languages</th><th>Capacity</th><th>Verified</th></tr>
+      {% endif %}
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        {% if kind == 'students' %}
+          <tr>
+            <td><strong>{{ r.name }}</strong></td>
+            <td>{{ r.course }}</td>
+            <td>{{ r.grade_level if r.grade_level is defined else r.year }}</td>
+            <td>{{ r.needs or '—' }}</td>
+            <td>{{ r.languages or '—' }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td><strong>{{ r.name }}</strong></td>
+            <td>{{ r.course }}</td>
+            <td>{{ r.year }}</td>
+            <td>{{ r.subjects or '—' }}</td>
+            <td>{{ r.languages or '—' }}</td>
+            <td>{{ r.capacity }}</td>
+            <td><span class="pill {{ 'pill-green' if r.verified else 'pill-amber' }}">{{ 'Yes' if r.verified else 'No' }}</span></td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

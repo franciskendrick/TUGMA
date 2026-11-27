@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Help Center — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Help Center</h1>
+<p class="page-subtitle">How TUGMA matches students and peer tutors using Discrete Structures.</p>
+
+<div class="cards-grid-2">
+  <div class="card">
+    <h2 style="margin:0 0 8px 0; font-size:16px; font-weight:800; color:var(--ink);">For Students (Learning Mode)</h2>
+    <ol style="margin:0; padding-left:18px; color:var(--body); display:flex; flex-direction:column; gap:6px;">
+      <li>Add your class schedule on the <strong>Calendar</strong> page so TUGMA knows your free time blocks.</li>
+      <li>Go to <strong>Match with Tutor</strong> and add the subjects you need help with.</li>
+      <li>Review tutors with <strong>4/4 Compatibility</strong> and click <strong>Request tutoring</strong>.</li>
+      <li>Track responses on the <strong>Sessions</strong> page.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2 style="margin:0 0 8px 0; font-size:16px; font-weight:800; color:var(--ink);">For Peer Tutors (Tutoring Mode)</h2>
+    <ol style="margin:0; padding-left:18px; color:var(--body); display:flex; flex-direction:column; gap:6px;">
+      <li>Switch to <strong>Tutor</strong> using the toggle in the top bar.</li>
+      <li>Add the subjects you teach on <strong>Classes</strong> and your weekly availability on <strong>Calendar</strong>.</li>
+      <li>Set your student capacity limit on <strong>Home</strong>.</li>
+      <li>Accept or decline incoming requests on <strong>Sessions</strong>.</li>
+    </ol>
+  </div>
+</div>
+{% endblock %}

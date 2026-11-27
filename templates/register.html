@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Create Account — TUGMA{% endblock %}
+{% block body %}
+<div class="auth-split">
+  <div class="auth-left">
+    <a href="{{ url_for('index') }}" style="display:flex; align-items:center; gap:10px; font-weight:800; font-size:20px;">
+      <img src="{{ url_for('serve_assets', filename='logo.png') }}" alt="TUGMA" style="width:36px; height:36px; border-radius:9px;">
+      TUGMA
+    </a>
+    <div>
+      <h2 style="font-size: 28px; font-weight: 800; margin: 0 0 10px 0; line-height: 1.2;">Join TUGMA peer tutoring.</h2>
+      <p style="margin: 0 0 16px 0; color: rgba(255,255,255,0.85);">Learn from peers who aced the subject, or tutor subjects you're strong in.</p>
+      <div style="font-size: 13px; font-weight: 700; color: #D4E9DD;">De La Salle University – Dasmariñas</div>
+    </div>
+  </div>
+
+  <div class="auth-right">
+    <a href="{{ url_for('login_page') }}" style="position:absolute; top:28px; left:36px; font-size:13px; font-weight:700; color:var(--body);">&lt; Back</a>
+    <div class="auth-card">
+      <h1 style="font-size: 28px; font-weight: 800; color: var(--ink); margin: 0 0 6px 0;">Create account</h1>
+      <p style="margin: 0 0 18px 0; color: var(--muted); font-size: 13px;">Set up your TUGMA student or tutor profile.</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack">
+            {% for cat, msg in messages %}
+              <div class="flash flash-{{ cat }}">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" action="{{ url_for('register_page') }}">
+        <div class="form-group">
+          <label class="form-label">Full name</label>
+          <input type="text" name="full_name" class="form-control" placeholder="e.g. Francis Kendrick Maddumba" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" name="email" class="form-control" placeholder="e.g. you@dlsud.edu.ph" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Course / Section</label>
+            <input type="text" name="course" class="form-control" placeholder="e.g. BCS" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Year level</label>
+            <input type="number" name="grade_level" class="form-control" min="1" max="6" value="2" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">I want to join as</label>
+          <select name="role" class="form-control">
+            <option value="student">Student (Tutee)</option>
+            <option value="tutor">Peer Tutor</option>
+            <option value="both">Both Student &amp; Peer Tutor</option>
+          </select>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" minlength="8" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm</label>
+            <input type="password" name="confirm_password" class="form-control" minlength="8" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

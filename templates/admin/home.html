@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Admin Home — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Home</h1>
+<p class="page-subtitle">{{ n_matched }} of {{ n_students }} students have a compatible tutor assignment.</p>
+
+<div style="background:var(--border); border-radius:999px; height:8px; overflow:hidden; margin-bottom:20px;">
+  <div style="background:var(--primary); height:100%; width: {{ (100 * n_matched / n_students)|round|int if n_students else 0 }}%;"></div>
+</div>
+
+<div class="stats-grid-4">
+  <div class="stat-card"><div class="stat-num">{{ n_students }}</div><div class="stat-label">Students</div></div>
+  <div class="stat-card"><div class="stat-num">{{ n_tutors }}</div><div class="stat-label">Tutors</div></div>
+  <div class="stat-card"><div class="stat-num">{{ n_matched }}</div><div class="stat-label">Students with a tutor</div></div>
+  <div class="stat-card"><div class="stat-num {{ 'accent' if n_waiting > 0 else '' }}">{{ n_waiting }}</div><div class="stat-label">Students still waiting</div></div>
+</div>
+
+{% if unverified %}
+  <h2 class="section-title">Tutors waiting for verification</h2>
+  <div class="card" style="margin-bottom:16px;">
+    {% for t in unverified %}
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
+        <div><strong>{{ t.name }}</strong> · {{ t.course }} (Year {{ t.grade_level }})</div>
+        <a href="{{ url_for('admin_accounts') }}" class="btn btn-primary btn-sm">Review in Accounts</a>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<h2 class="section-title">Needs attention</h2>
+{% if unmatched_list %}
+  <div class="card" style="display:flex; flex-direction:column; gap:10px;">
+    {% for u in unmatched_list %}
+      <div style="padding:10px 14px; background:var(--pill-amber-bg); color:var(--pill-amber-fg); border-radius:10px; font-size:13px;">
+        <strong>{{ u.name }}</strong> has no tutor yet. {{ u.reason }}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card" style="color:var(--pill-green-fg); background:var(--pill-green-bg);">
+    Every student has a compatible tutor!
+  </div>
+{% endif %}
+{% endblock %}

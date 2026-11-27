@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Classes I Teach — TUGMA{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 22px; align-items: start;">
+  <div class="card">
+    <h2 style="margin: 0 0 14px 0; font-size: 16px; font-weight: 800; color: var(--ink);">Subjects I can teach</h2>
+
+    <form action="{{ url_for('add_teach_route') }}" method="post">
+      <div class="form-group">
+        <label class="form-label">Add a subject</label>
+        <select name="subject_id" class="form-control" required>
+          {% for s in available_subjects %}
+            <option value="{{ s.subject_id }}">{{ s.subject_code }} — {{ s.subject_name.title() }}</option>
+          {% else %}
+            <option disabled>All subjects added</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" {{ 'disabled' if not available_subjects else '' }}>+ Add subject</button>
+    </form>
+
+    <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+      {% for t in teaches %}
+        {% set is_sel = selected_teach and selected_teach.subject_id == t.subject_id %}
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:12px; border:1px solid {{ 'var(--primary)' if is_sel else 'var(--border)' }}; background:{{ 'var(--pill-green-bg)' if is_sel else 'var(--white)' }};">
+          <a href="{{ url_for('classes_page', subject_id=t.subject_id) }}" style="flex:1; min-width:0;">
+            <div style="font-weight:800; font-size:13px; color:var(--ink);">{{ t.subject_name.title() }}</div>
+            <div style="font-size:11.5px; color:var(--muted);">{{ t.subject_code }}</div>
+          </a>
+          <form action="{{ url_for('delete_teach_route') }}" method="post">
+            <input type="hidden" name="subject_id" value="{{ t.subject_id }}">
+            <button type="submit" class="btn btn-ghost btn-sm" style="min-height:28px; padding:0 8px;" title="Remove">✕</button>
+          </form>
+        </div>
+      {% else %}
+        <p style="font-size:12.5px; color:var(--muted); margin:6px 0 0 0;">No subjects added yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div>
+    {% if selected_teach %}
+      <h1 class="page-title" style="font-size:22px;">Students who need {{ selected_teach.subject_name.title() }}</h1>
+      <p class="page-subtitle">Students request tutoring from their own Match with Tutor page.</p>
+
+      {% if students_needing %}
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Course &amp; Year</th>
+                <th>Stuck on</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for st in students_needing %}
+                <tr>
+                  <td><strong>{{ st.name }}</strong></td>
+                  <td>{{ st.course }} · Year {{ st.grade_level }}</td>
+                  <td>{{ st.note or '—' }}</td>
+                  <td><a href="{{ url_for('student_profile', student_id=st.student_id) }}" class="btn btn-outline btn-sm">View profile</a></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card" style="color: var(--muted);">No students currently list this subject.</div>
+      {% endif %}
+    {% else %}
+      <div class="card" style="color: var(--muted);">Add a subject on the left to see students who need help with it.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

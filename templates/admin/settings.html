@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Settings — Admin — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Settings</h1>
+<p class="page-subtitle">Configure tutor capacity policy for the bipartite matching simulation.</p>
+
+<div class="card" style="max-width:520px;">
+  <h2 style="margin:0 0 12px 0; font-size:16px; font-weight:800; color:var(--ink);">How many students can a tutor take?</h2>
+  <form method="post" action="{{ url_for('admin_settings') }}">
+    <input type="hidden" name="action" value="capacity">
+    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:8px;">
+        <input type="radio" name="cap_mode" value="stored" {{ 'checked' if cap_mode == 'stored' else '' }}>
+        Each tutor's own limit (from database)
+      </label>
+      <label style="display:flex; align-items:center; gap:8px;">
+        <input type="radio" name="cap_mode" value="uniform" {{ 'checked' if cap_mode == 'uniform' else '' }}>
+        The same limit for every tutor
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Uniform capacity (used when uniform is selected)</label>
+      <input type="number" name="cap_uniform" class="form-control" min="1" max="50" value="{{ cap_uniform }}">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Save settings</button>
+  </form>
+</div>
+{% endblock %}

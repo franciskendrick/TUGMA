@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}People — TUGMA{% endblock %}
+
+{% block content %}
+<h1 class="page-title">People</h1>
+<p class="page-subtitle">Everyone on TUGMA at DLSU-D, students and peer tutors. Click a name to see their profile.</p>
+
+<div class="tab-bar">
+  <a href="{{ url_for('people_page', tab='everyone', q=q) }}" class="tab-pill {{ 'active' if tab == 'everyone' else '' }}">Everyone</a>
+  <a href="{{ url_for('people_page', tab='tutors', q=q) }}" class="tab-pill {{ 'active' if tab == 'tutors' else '' }}">Tutors</a>
+  <a href="{{ url_for('people_page', tab='students', q=q) }}" class="tab-pill {{ 'active' if tab == 'students' else '' }}">Students</a>
+</div>
+
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Student</th>
+        <th>Tutor</th>
+        <th>Tutors in</th>
+        <th>Rating</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in people %}
+        <tr>
+          <td style="color:var(--muted);">{{ loop.index }}</td>
+          <td>
+            <a href="{{ url_for('tutor_profile', tutor_id=p.id) if p.kind == 'tutor' else url_for('student_profile', student_id=p.id) }}" style="display:flex; align-items:center; gap:10px;">
+              <span class="avatar avatar-sm">{{ initials(p.name) }}</span>
+              <div>
+                <div style="font-weight:700; color:var(--primary);">{{ p.name }}</div>
+                <div style="font-size:11.5px; color:var(--muted);">{{ p.course }}, Year {{ p.grade_level }}</div>
+              </div>
+            </a>
+          </td>
+          <td>{% if p.is_student %}<span style="color:var(--primary); font-weight:800;">✓</span>{% else %}—{% endif %}</td>
+          <td>{% if p.is_tutor %}<span style="color:var(--primary); font-weight:800;">✓</span>{% else %}—{% endif %}</td>
+          <td>{{ p.teaches }}</td>
+          <td>{% if p.rating %}<span style="font-weight:700;">★ {{ p.rating }}</span>{% else %}—{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" style="text-align:center; color:var(--muted); padding:24px;">No people match your filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block right_rail %}
+<aside class="right-rail">
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:12px;">Search</strong>
+    <form action="{{ url_for('people_page') }}" method="get">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input type="text" name="q" class="form-control" placeholder="Type a name" value="{{ q }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Course</label>
+        <select name="course" class="form-control">
+          <option value="">All courses</option>
+          {% for c in courses %}
+            <option value="{{ c }}" {{ 'selected' if course_filter == c else '' }}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subject</label>
+        <select name="subject" class="form-control">
+          <option value="">All subjects</option>
+          {% for s in subjects %}
+            <option value="{{ s }}" {{ 'selected' if subject_filter == s else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm" style="flex:1;">Filter</button>
+        <a href="{{ url_for('people_page') }}" class="btn btn-ghost btn-sm">Clear</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <strong style="color:var(--ink); display:block; margin-bottom:10px;">On TUGMA</strong>
+    <div style="display:flex; flex-direction:column; gap:6px; font-size:13px;">
+      <div><strong style="color:var(--primary);">{{ total_people }}</strong> people at DLSU-D</div>
+      <div><strong style="color:var(--primary);">{{ total_tutors }}</strong> peer tutors</div>
+      <div><strong style="color:var(--primary);">{{ avg_rating }} ★</strong> average tutor rating</div>
+    </div>
+  </div>
+</aside>
+{% endblock %}

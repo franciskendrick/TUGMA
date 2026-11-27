@@ -1,640 +1,1226 @@
-# Main entry point for the TUGMA Streamlit web application.
-# Handles the user interface and coordinates the different system components.
-#
-# This file contains NO mathematical logic. Every step of the pipeline
-#   Data -> Sets -> Logic -> Relation -> Graph -> Matching
-# is delegated to the corresponding module in src/.
+"""Main Flask entry point for the TUGMA web application.
 
-import sqlite3
+Replaces the legacy Streamlit UI with HTML/CSS/Jinja2 templates connected
+directly to src/ (Discrete Structures engine) and services/ (business logic).
+"""
+
+import io
+import os
 from collections import Counter
-from datetime import time
-from pathlib import Path
+from datetime import datetime
+from functools import wraps
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import pandas as pd
-import streamlit as st
+from flask import (
+    Flask,
+    Response,
+    flash,
+    g,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 
-from services.account_service import set_tutor_verified
+from services.account_service import (
+    DAYS,
+    LANGUAGES,
+    add_availability,
+    add_class,
+    add_need,
+    add_profile,
+    add_teach,
+    delete_availability,
+    delete_class,
+    remove_need,
+    remove_teach,
+    set_capacity,
+    set_languages,
+    set_tutor_verified,
+)
 from services.auth_service import (
     AuthError,
     PermissionDenied,
     get_user,
     list_accounts,
+    login as auth_login,
+    register as auth_register,
     require_role,
     set_account_active,
 )
 from services.migrations import DB_PATH, ensure_database
-from views.auth import render_auth
-from views.components import LOGO_PATH, brand, inject_css
-from views.portal import render_portal
+from services.pipeline import (
+    Services,
+    fmt12,
+    fmt_range,
+    run_pipeline,
+    to_minutes,
+)
+from services.profile_service import (
+    get_student_profile_data,
+    get_tutor_profile_data,
+)
+from services.session_service import (
+    cancel as cancel_session,
+    common_slots,
+    list_sessions,
+    request_session,
+    respond as respond_session,
+    upcoming_dates,
+)
 from src.database import Database
-from src.sets import SetOperations
-from src.scheduling import ScheduleManager
-from src.logic import CompatibilityLogic
-from src.relations import CompatibilityRelation
-from src.graph import BipartiteGraph
-from src.matching import CapacityMatcher
 from src.visualization import TUGMAVisualizer
 
+app = Flask(__name__)
+app.secret_key = os.environ.get("TUGMA_SECRET_KEY", "tugma-dev-secret-key-2026")
+app.jinja_env.filters["fmt_range"] = fmt_range
+app.jinja_env.filters["fmt12"] = fmt12
 
-from services.pipeline import *  # noqa: F401,F403
-from services.pipeline import Services, run_pipeline
+
+# ---------------------------------------------------------------------------
+# Helpers & Request Lifecycle
+# ---------------------------------------------------------------------------
+def get_db():
+    if "db" not in g:
+        g.db = Database(DB_PATH)
+    return g.db
 
 
-def reset_database(admin_user_id):
-    """Restore the seed data. Administrator accounts are kept."""
-    db = Database(DB_PATH)
-    try:
-        require_role(db, admin_user_id, "admin")  # re-checked server-side
-        admins = [
-            tuple(r)
-            for r in db.fetch_all(
-                "SELECT email, password_hash, display_name "
-                "FROM users WHERE role = 'admin'"
+@app.teardown_appcontext
+def close_db(exception=None):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def current_user():
+    uid = session.get("user_id")
+    if not uid:
+        return None
+    if "current_user" not in g:
+        g.current_user = get_user(get_db(), uid)
+    return g.current_user
+
+
+def initials(name):
+    parts = [p for p in (name or "").split() if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[-1][0]).upper()
+
+
+def active_mode(user):
+    if not user or user["role"] == "admin":
+        return None
+    modes = user["modes"]
+    mode = session.get("mode")
+    if mode not in modes and modes:
+        mode = modes[0]
+        session["mode"] = mode
+    return mode
+
+
+def get_pipeline_data():
+    cap_mode = session.get("cap_mode", "stored")
+    cap_uniform = int(session.get("cap_uniform", 1))
+    mtime = DB_PATH.stat().st_mtime_ns if DB_PATH.exists() else 0
+    return run_pipeline(mtime, cap_mode, cap_uniform)
+
+
+@app.context_processor
+def inject_globals():
+    user = current_user()
+    mode = active_mode(user)
+    notif_count = 0
+    if user and user["role"] == "member" and mode:
+        try:
+            tabs = list_sessions(get_db(), user["user_id"], mode)
+            notif_count = len(tabs["reply"]) if mode == "Tutoring" else len(tabs["sent"])
+        except Exception:
+            notif_count = 0
+    return {
+        "user": user,
+        "mode": mode,
+        "initials": initials,
+        "fmt12": fmt12,
+        "fmt_range": fmt_range,
+        "notif_count": notif_count,
+        "DAYS": DAYS,
+        "LANGUAGES": LANGUAGES,
+    }
+
+
+def login_required(role=None):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user = current_user()
+            if not user:
+                session.clear()
+                return redirect(url_for("login_page"))
+            if role == "admin" and user["role"] != "admin":
+                flash("Administrator access is required.", "error")
+                return redirect(url_for("home"))
+            if role == "member" and user["role"] == "admin":
+                return redirect(url_for("admin_home"))
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@app.route("/assets/<path:filename>")
+def serve_assets(filename):
+    return send_from_directory("assets", filename)
+
+
+# ---------------------------------------------------------------------------
+# Public & Authentication Routes
+# ---------------------------------------------------------------------------
+@app.route("/")
+def index():
+    user = current_user()
+    if user:
+        if user["role"] == "admin":
+            return redirect(url_for("admin_home"))
+        return redirect(url_for("home"))
+    return render_template("landing.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    user = current_user()
+    if user:
+        return redirect(url_for("admin_home" if user["role"] == "admin" else "home"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "")
+        password = request.form.get("password", "")
+        try:
+            logged_in = auth_login(get_db(), email, password)
+            session["user_id"] = logged_in["user_id"]
+            session["mode"] = logged_in["modes"][0] if logged_in["modes"] else None
+            if logged_in["role"] == "admin":
+                return redirect(url_for("admin_home"))
+            return redirect(url_for("home"))
+        except AuthError as err:
+            flash(str(err), "error")
+    return render_template("login.html")
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login_page():
+    user = current_user()
+    if user and user["role"] == "admin":
+        return redirect(url_for("admin_home"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "")
+        password = request.form.get("password", "")
+        try:
+            logged_in = auth_login(get_db(), email, password)
+            if logged_in["role"] != "admin":
+                flash("This login is restricted to TUGMA administrators.", "error")
+            else:
+                session["user_id"] = logged_in["user_id"]
+                return redirect(url_for("admin_home"))
+        except AuthError as err:
+            flash(str(err), "error")
+    return render_template("admin_login.html")
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register_page():
+    if current_user():
+        return redirect(url_for("home"))
+
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "")
+        email = request.form.get("email", "")
+        course = request.form.get("course", "")
+        role = request.form.get("role", "student")
+        try:
+            grade_level = int(request.form.get("grade_level", 1))
+        except ValueError:
+            grade_level = 0
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        try:
+            created = auth_register(
+                get_db(), full_name, email, password, confirm,
+                role, grade_level, course
             )
+            session["user_id"] = created["user_id"]
+            session["mode"] = created["modes"][0] if created["modes"] else None
+            flash("Welcome to TUGMA! Your account has been created.", "success")
+            return redirect(url_for("home"))
+        except AuthError as err:
+            flash(str(err), "error")
+    return render_template("register.html")
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
+@app.route("/mode", methods=["POST"])
+@login_required("member")
+def switch_mode():
+    user = current_user()
+    target = request.form.get("mode")
+    if target in user["modes"]:
+        session["mode"] = target
+    elif target in ("Learning", "Tutoring"):
+        kind = "student" if target == "Learning" else "tutor"
+        try:
+            add_profile(get_db(), user["user_id"], kind)
+            session["mode"] = target
+            flash(
+                "Tutor profile created! An administrator will verify it shortly."
+                if kind == "tutor" else "Student profile created!",
+                "success",
+            )
+        except AuthError as err:
+            flash(str(err), "error")
+    return redirect(request.referrer or url_for("home"))
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: Home
+# ---------------------------------------------------------------------------
+@app.route("/home")
+@login_required("member")
+def home():
+    user = current_user()
+    mode = active_mode(user)
+    db = get_db()
+    data = get_pipeline_data()
+    tabs = list_sessions(db, user["user_id"], mode)
+
+    if mode == "Learning":
+        sid = user["student_id"]
+        student_row = db.fetch_one("SELECT * FROM students WHERE student_id = ?", (sid,))
+        needs = db.fetch_all(
+            "SELECT s.subject_id, s.subject_code, s.subject_name, ss.note "
+            "FROM student_subjects ss JOIN subjects s ON s.subject_id = ss.subject_id "
+            "WHERE ss.student_id = ? ORDER BY s.subject_code",
+            (sid,),
+        )
+        # Suggested / Top Match tutors from pipeline
+        matched_tutors = []
+        pipeline_match = next((m for m in data["matches"] if m["student_id"] == sid), None)
+        compatible_tids = [t for t, s in data["relation"] if s == sid]
+        ordered_tids = []
+        if pipeline_match:
+            ordered_tids.append(pipeline_match["tutor_id"])
+        for t in compatible_tids:
+            if t not in ordered_tids:
+                ordered_tids.append(t)
+
+        for tid in ordered_tids[:2]:
+            t_info = get_tutor_profile_data(db, tid)
+            if not t_info:
+                continue
+            slots = common_slots(db, tid, sid)
+            shared_subjs = sorted(
+                set(r["subject_code"] for r in needs)
+                & set(
+                    r["subject_code"]
+                    for r in db.fetch_all(
+                        "SELECT s.subject_code FROM tutor_subjects ts "
+                        "JOIN subjects s ON s.subject_id = ts.subject_id "
+                        "WHERE ts.tutor_id = ?",
+                        (tid,),
+                    )
+                )
+            )
+            matched_tutors.append({
+                "tutor_id": tid,
+                "profile": t_info["profile"],
+                "rating": t_info["rating"],
+                "slots": slots,
+                "shared_subjects": shared_subjs,
+                "is_top_match": pipeline_match and pipeline_match["tutor_id"] == tid,
+                "remaining_spots": data["remaining"].get(tid, t_info["profile"]["capacity"]),
+            })
+
+        return render_template(
+            "portal/home_student.html",
+            student=student_row,
+            needs=needs,
+            tabs=tabs,
+            matched_tutors=matched_tutors,
+            today=datetime.now().strftime("%B %d, %Y"),
+        )
+    else:
+        tid = user["tutor_id"]
+        tutor_row = db.fetch_one("SELECT * FROM tutors WHERE tutor_id = ?", (tid,))
+        teaches = db.fetch_all(
+            "SELECT s.subject_id, s.subject_code, s.subject_name "
+            "FROM tutor_subjects ts JOIN subjects s ON s.subject_id = ts.subject_id "
+            "WHERE ts.tutor_id = ? ORDER BY s.subject_code",
+            (tid,),
+        )
+        taken = db.fetch_one(
+            "SELECT COUNT(DISTINCT student_id) AS n FROM sessions "
+            "WHERE tutor_id = ? AND status = 'confirmed'",
+            (tid,),
+        )["n"]
+        return render_template(
+            "portal/home_tutor.html",
+            tutor=tutor_row,
+            teaches=teaches,
+            tabs=tabs,
+            taken=taken,
+            today=datetime.now().strftime("%B %d, %Y"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: Match with Tutor / Classes
+# ---------------------------------------------------------------------------
+def _evaluate_student_tutors(db, sid, subject_code, data):
+    """Return full matches (4/4) and almost-matches (3/4) for a student & subject."""
+    svc = Services()
+    try:
+        tutors = db.fetch_all(
+            "SELECT t.*, COALESCE(AVG(r.score), 0) AS avg_rating, "
+            "COUNT(DISTINCT tr.review_id) AS review_count "
+            "FROM tutors t "
+            "LEFT JOIN tutor_reviews tr ON tr.tutor_id = t.tutor_id "
+            "LEFT JOIN tutor_review_scores r ON r.review_id = tr.review_id "
+            "WHERE t.verified = 1 "
+            "GROUP BY t.tutor_id ORDER BY t.tutor_id"
+        )
+        pipeline_match = next((m for m in data["matches"] if m["student_id"] == sid), None)
+        full_matches = []
+        almost_matches = []
+
+        for t in tutors:
+            tid = t["tutor_id"]
+            ev = svc.logic.evaluate(tid, sid)
+            if not ev["not_self"]:
+                continue
+            t_subjs = svc.sets.get_tutor_subjects(tid)
+            if subject_code and subject_code not in t_subjs:
+                subj_ok = False
+            else:
+                subj_ok = ev["subject_match"]
+
+            slots = common_slots(db, tid, sid) if ev["time_match"] else []
+            rules_met = sum([subj_ok, ev["time_match"], ev["language_match"], True])
+
+            t_langs = sorted(svc.sets.get_tutor_languages(tid))
+            card = {
+                "tutor": dict(t),
+                "subjects": sorted(t_subjs),
+                "languages": t_langs,
+                "slots": slots,
+                "slot_options": [
+                    {
+                        "date": d.isoformat(),
+                        "label": f"{d.strftime('%a %b %d')} · {fmt12(sl['start_time'])}–{fmt12(sl['end_time'])}",
+                        "start": sl["start_time"],
+                        "end": sl["end_time"],
+                    }
+                    for sl in slots
+                    for d in upcoming_dates(sl["day"], weeks=2)
+                ],
+                "subj_ok": subj_ok,
+                "time_ok": ev["time_match"],
+                "lang_ok": ev["language_match"],
+                "cap_ok": data["remaining"].get(tid, t["capacity"]) > 0,
+                "remaining_spots": data["remaining"].get(tid, t["capacity"]),
+                "is_suggested": pipeline_match and pipeline_match["tutor_id"] == tid,
+                "rules_met": rules_met,
+            }
+            if subj_ok and ev["time_match"] and ev["language_match"]:
+                full_matches.append(card)
+            elif rules_met >= 2:
+                almost_matches.append(card)
+        return full_matches, almost_matches
+    finally:
+        svc.close()
+
+
+@app.route("/classes")
+@login_required("member")
+def classes_page():
+    user = current_user()
+    mode = active_mode(user)
+    db = get_db()
+    all_subjects = db.fetch_all("SELECT * FROM subjects ORDER BY subject_code")
+
+    if mode == "Learning":
+        sid = user["student_id"]
+        needs = db.fetch_all(
+            "SELECT s.subject_id, s.subject_code, s.subject_name, ss.note "
+            "FROM student_subjects ss JOIN subjects s ON s.subject_id = ss.subject_id "
+            "WHERE ss.student_id = ? ORDER BY s.subject_code",
+            (sid,),
+        )
+        selected_id = request.args.get("subject_id", type=int)
+        if not selected_id and needs:
+            selected_id = needs[0]["subject_id"]
+        selected_need = next((n for n in needs if n["subject_id"] == selected_id), None)
+
+        data = get_pipeline_data()
+        full_matches, almost_matches = [], []
+        if selected_need:
+            full_matches, almost_matches = _evaluate_student_tutors(
+                db, sid, selected_need["subject_code"], data
+            )
+
+        need_ids = {n["subject_id"] for n in needs}
+        available_subjects = [s for s in all_subjects if s["subject_id"] not in need_ids]
+
+        return render_template(
+            "portal/classes_student.html",
+            needs=needs,
+            selected_need=selected_need,
+            available_subjects=available_subjects,
+            full_matches=full_matches,
+            almost_matches=almost_matches,
+        )
+    else:
+        tid = user["tutor_id"]
+        teaches = db.fetch_all(
+            "SELECT s.subject_id, s.subject_code, s.subject_name "
+            "FROM tutor_subjects ts JOIN subjects s ON s.subject_id = ts.subject_id "
+            "WHERE ts.tutor_id = ? ORDER BY s.subject_code",
+            (tid,),
+        )
+        teach_ids = {t["subject_id"] for t in teaches}
+        available_subjects = [s for s in all_subjects if s["subject_id"] not in teach_ids]
+
+        selected_id = request.args.get("subject_id", type=int)
+        if not selected_id and teaches:
+            selected_id = teaches[0]["subject_id"]
+        selected_teach = next((t for t in teaches if t["subject_id"] == selected_id), None)
+
+        students_needing = []
+        if selected_teach:
+            students_needing = db.fetch_all(
+                "SELECT st.student_id, st.name, st.course, st.grade_level, ss.note "
+                "FROM student_subjects ss "
+                "JOIN students st ON st.student_id = ss.student_id "
+                "WHERE ss.subject_id = ? ORDER BY st.name",
+                (selected_teach["subject_id"],),
+            )
+
+        return render_template(
+            "portal/classes_tutor.html",
+            teaches=teaches,
+            selected_teach=selected_teach,
+            available_subjects=available_subjects,
+            students_needing=students_needing,
+        )
+
+
+@app.route("/classes/need/add", methods=["POST"])
+@login_required("member")
+def add_need_route():
+    user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
+    note = request.form.get("note", "")
+    try:
+        add_need(get_db(), user["user_id"], subject_id, note)
+        flash("Class added to your learning list.", "success")
+    except AuthError as err:
+        flash(str(err), "error")
+    return redirect(url_for("classes_page", subject_id=subject_id))
+
+
+@app.route("/classes/need/delete", methods=["POST"])
+@login_required("member")
+def delete_need_route():
+    user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
+    remove_need(get_db(), user["user_id"], subject_id)
+    flash("Class removed.", "success")
+    return redirect(url_for("classes_page"))
+
+
+@app.route("/classes/teach/add", methods=["POST"])
+@login_required("member")
+def add_teach_route():
+    user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
+    try:
+        add_teach(get_db(), user["user_id"], subject_id)
+        flash("Subject added to your tutoring list.", "success")
+    except AuthError as err:
+        flash(str(err), "error")
+    return redirect(url_for("classes_page", subject_id=subject_id))
+
+
+@app.route("/classes/teach/delete", methods=["POST"])
+@login_required("member")
+def delete_teach_route():
+    user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
+    remove_teach(get_db(), user["user_id"], subject_id)
+    flash("Subject removed.", "success")
+    return redirect(url_for("classes_page"))
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: Calendar
+# ---------------------------------------------------------------------------
+def _build_calendar_events(db, user, mode):
+    """Build weekly grid events (Mon-Sat, 7 AM - 6 PM) for the logged-in user."""
+    events = []
+    if mode == "Learning":
+        sid = user["student_id"]
+        classes = db.fetch_all(
+            "SELECT sc.schedule_id, sc.day, sc.start_time, sc.end_time, "
+            "sub.subject_code, sub.subject_name "
+            "FROM student_schedule sc JOIN subjects sub ON sub.subject_id = sc.subject_id "
+            "WHERE sc.student_id = ? ORDER BY sc.day, sc.start_time",
+            (sid,),
+        )
+        for c in classes:
+            events.append({
+                "kind": "class",
+                "day": c["day"],
+                "start": c["start_time"],
+                "end": c["end_time"],
+                "title": c["subject_name"],
+                "subtitle": c["subject_code"],
+            })
+        # Free blocks (gaps) from ScheduleManager
+        svc = Services()
+        try:
+            free_slots = svc.schedules.get_student_free_slots(sid)
+        finally:
+            svc.close()
+        for f in free_slots:
+            events.append({
+                "kind": "free",
+                "day": f["day"],
+                "start": f["start_time"],
+                "end": f["end_time"],
+                "title": "Free time",
+                "subtitle": f"{fmt12(f['start_time'])}–{fmt12(f['end_time'])}",
+            })
+        avail_rows = []
+    else:
+        tid = user["tutor_id"]
+        classes = []
+        avail_rows = db.fetch_all(
+            "SELECT availability_id, day, start_time, end_time "
+            "FROM tutor_availability WHERE tutor_id = ? ORDER BY day, start_time",
+            (tid,),
+        )
+        for a in avail_rows:
+            events.append({
+                "kind": "free",
+                "day": a["day"],
+                "start": a["start_time"],
+                "end": a["end_time"],
+                "title": "Available to tutor",
+                "subtitle": f"{fmt12(a['start_time'])}–{fmt12(a['end_time'])}",
+            })
+
+    # Add upcoming/pending sessions
+    tabs = list_sessions(db, user["user_id"], mode)
+    for s in tabs["upcoming"]:
+        day_name = datetime.strptime(s["session_date"], "%Y-%m-%d").strftime("%A")
+        events.append({
+            "kind": "session",
+            "day": day_name,
+            "start": s["start_time"],
+            "end": s["end_time"],
+            "title": s["subject_name"],
+            "subtitle": f"with {s['tutor_name'] if mode == 'Learning' else s['student_name']}",
+        })
+    pending_list = tabs["sent"] if mode == "Learning" else tabs["reply"]
+    for s in pending_list:
+        day_name = datetime.strptime(s["session_date"], "%Y-%m-%d").strftime("%A")
+        events.append({
+            "kind": "pending",
+            "day": day_name,
+            "start": s["start_time"],
+            "end": s["end_time"],
+            "title": f"Pending: {s['subject_name']}",
+            "subtitle": s["session_date"],
+        })
+    return events, classes, avail_rows
+
+
+@app.route("/calendar")
+@login_required("member")
+def calendar_page():
+    user = current_user()
+    mode = active_mode(user)
+    db = get_db()
+    events, classes, avail_rows = _build_calendar_events(db, user, mode)
+    subjects = db.fetch_all("SELECT * FROM subjects ORDER BY subject_code")
+
+    hours = list(range(7, 19))  # 7 AM to 6 PM
+    # Compute percentage top & height for each event in a 7:00-19:00 (720 min) grid
+    positioned = {d: [] for d in DAYS}
+    for ev in events:
+        if ev["day"] not in positioned:
+            continue
+        start_m = max(7 * 60, to_minutes(ev["start"]))
+        end_m = min(19 * 60, to_minutes(ev["end"]))
+        if end_m <= start_m:
+            continue
+        ev["top_pct"] = ((start_m - 7 * 60) / (12 * 60)) * 100
+        ev["height_pct"] = max(4.0, ((end_m - start_m) / (12 * 60)) * 100)
+        positioned[ev["day"]].append(ev)
+
+    return render_template(
+        "portal/calendar.html",
+        hours=hours,
+        positioned=positioned,
+        classes=classes,
+        avail_rows=avail_rows,
+        subjects=subjects,
+    )
+
+
+@app.route("/calendar/class/add", methods=["POST"])
+@login_required("member")
+def add_class_route():
+    user = current_user()
+    subject_id = request.form.get("subject_id", type=int)
+    day = request.form.get("day", "")
+    start = request.form.get("start_time", "")
+    end = request.form.get("end_time", "")
+    try:
+        add_class(get_db(), user["user_id"], subject_id, day, start, end)
+        flash("Class added to your calendar.", "success")
+    except AuthError as err:
+        flash(str(err), "error")
+    return redirect(url_for("calendar_page"))
+
+
+@app.route("/calendar/class/delete", methods=["POST"])
+@login_required("member")
+def delete_class_route():
+    user = current_user()
+    schedule_id = request.form.get("schedule_id", type=int)
+    delete_class(get_db(), user["user_id"], schedule_id)
+    flash("Class removed from calendar.", "success")
+    return redirect(url_for("calendar_page"))
+
+
+@app.route("/calendar/availability/add", methods=["POST"])
+@login_required("member")
+def add_availability_route():
+    user = current_user()
+    day = request.form.get("day", "")
+    start = request.form.get("start_time", "")
+    end = request.form.get("end_time", "")
+    try:
+        add_availability(get_db(), user["user_id"], day, start, end)
+        flash("Availability added.", "success")
+    except AuthError as err:
+        flash(str(err), "error")
+    return redirect(url_for("calendar_page"))
+
+
+@app.route("/calendar/availability/delete", methods=["POST"])
+@login_required("member")
+def delete_availability_route():
+    user = current_user()
+    availability_id = request.form.get("availability_id", type=int)
+    delete_availability(get_db(), user["user_id"], availability_id)
+    flash("Availability removed.", "success")
+    return redirect(url_for("calendar_page"))
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: Sessions
+# ---------------------------------------------------------------------------
+@app.route("/sessions")
+@login_required("member")
+def sessions_page():
+    user = current_user()
+    mode = active_mode(user)
+    db = get_db()
+    tabs = list_sessions(db, user["user_id"], mode)
+    active_tab = request.args.get("tab", "pending")
+    if active_tab not in ("pending", "upcoming", "history"):
+        active_tab = "pending"
+    return render_template(
+        "portal/sessions.html",
+        tabs=tabs,
+        active_tab=active_tab,
+    )
+
+
+@app.route("/sessions/request", methods=["POST"])
+@login_required("member")
+def request_session_route():
+    user = current_user()
+    tutor_id = request.form.get("tutor_id", type=int)
+    subject_id = request.form.get("subject_id", type=int)
+    slot_value = request.form.get("slot", "")  # "YYYY-MM-DD|HH:MM|HH:MM"
+    note = request.form.get("note", "")
+    try:
+        session_date, start, end = slot_value.split("|")
+        request_session(
+            get_db(), user["user_id"], tutor_id, subject_id,
+            session_date, start, end, note
+        )
+        flash("Tutoring request sent!", "success")
+        return redirect(url_for("sessions_page", tab="pending"))
+    except (ValueError, AuthError) as err:
+        flash(str(err), "error")
+        return redirect(request.referrer or url_for("classes_page"))
+
+
+@app.route("/sessions/<int:session_id>/respond", methods=["POST"])
+@login_required("member")
+def respond_session_route(session_id):
+    user = current_user()
+    accept = request.form.get("action") == "accept"
+    try:
+        respond_session(get_db(), user["user_id"], session_id, accept)
+        flash("Session accepted!" if accept else "Request declined.", "success")
+    except (AuthError, PermissionDenied) as err:
+        flash(str(err), "error")
+    return redirect(url_for("sessions_page", tab="upcoming" if accept else "history"))
+
+
+@app.route("/sessions/<int:session_id>/cancel", methods=["POST"])
+@login_required("member")
+def cancel_session_route(session_id):
+    user = current_user()
+    try:
+        cancel_session(get_db(), user["user_id"], session_id)
+        flash("Session cancelled.", "success")
+    except (AuthError, PermissionDenied) as err:
+        flash(str(err), "error")
+    return redirect(url_for("sessions_page"))
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: People
+# ---------------------------------------------------------------------------
+@app.route("/people")
+@login_required("member")
+def people_page():
+    db = get_db()
+    tab = request.args.get("tab", "everyone")
+    q = (request.args.get("q") or "").strip().lower()
+    course_filter = (request.args.get("course") or "").strip()
+    subject_filter = (request.args.get("subject") or "").strip()
+
+    tutors = db.fetch_all(
+        "SELECT t.tutor_id, t.name, t.course, t.grade_level, t.verified, "
+        "GROUP_CONCAT(DISTINCT sub.subject_name) AS teaches, "
+        "ROUND(AVG(rs.score), 1) AS rating "
+        "FROM tutors t "
+        "LEFT JOIN tutor_subjects ts ON ts.tutor_id = t.tutor_id "
+        "LEFT JOIN subjects sub ON sub.subject_id = ts.subject_id "
+        "LEFT JOIN tutor_reviews tr ON tr.tutor_id = t.tutor_id "
+        "LEFT JOIN tutor_review_scores rs ON rs.review_id = tr.review_id "
+        "GROUP BY t.tutor_id ORDER BY t.name"
+    )
+    students = db.fetch_all(
+        "SELECT s.student_id, s.name, s.course, s.grade_level "
+        "FROM students s ORDER BY s.name"
+    )
+
+    people_rows = []
+    for t in tutors:
+        people_rows.append({
+            "kind": "tutor",
+            "id": t["tutor_id"],
+            "name": t["name"],
+            "course": t["course"],
+            "grade_level": t["grade_level"],
+            "is_student": False,
+            "is_tutor": True,
+            "verified": bool(t["verified"]),
+            "teaches": t["teaches"] or "—",
+            "rating": t["rating"],
+        })
+    for s in students:
+        people_rows.append({
+            "kind": "student",
+            "id": s["student_id"],
+            "name": s["name"],
+            "course": s["course"],
+            "grade_level": s["grade_level"],
+            "is_student": True,
+            "is_tutor": False,
+            "verified": True,
+            "teaches": "—",
+            "rating": None,
+        })
+
+    if tab == "tutors":
+        people_rows = [p for p in people_rows if p["is_tutor"]]
+    elif tab == "students":
+        people_rows = [p for p in people_rows if p["is_student"]]
+    if q:
+        people_rows = [
+            p for p in people_rows
+            if q in p["name"].lower() or q in p["teaches"].lower() or q in p["course"].lower()
         ]
-    finally:
-        db.close()
+    if course_filter:
+        people_rows = [p for p in people_rows if p["course"] == course_filter]
+    if subject_filter:
+        people_rows = [p for p in people_rows if subject_filter.lower() in p["teaches"].lower()]
 
-    DB_PATH.unlink()
-    ensure_database()
+    courses = sorted({p["course"] for p in people_rows if p["course"]})
+    subjects = [r["subject_name"] for r in db.fetch_all("SELECT subject_name FROM subjects ORDER BY subject_name")]
+    ratings = [t["rating"] for t in tutors if t["rating"] is not None]
+    avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else "—"
 
-    db = Database(DB_PATH)
+    return render_template(
+        "portal/people.html",
+        people=people_rows,
+        tab=tab,
+        q=q,
+        course_filter=course_filter,
+        subject_filter=subject_filter,
+        courses=courses,
+        subjects=subjects,
+        total_people=len(tutors) + len(students),
+        total_tutors=len(tutors),
+        avg_rating=avg_rating,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Member Portal: Profile & Help
+# ---------------------------------------------------------------------------
+@app.route("/profile")
+@login_required("member")
+def my_profile():
+    user = current_user()
+    mode = active_mode(user)
+    if mode == "Tutoring" and user["tutor_id"]:
+        return redirect(url_for("tutor_profile", tutor_id=user["tutor_id"]))
+    return redirect(url_for("student_profile", student_id=user["student_id"]))
+
+
+@app.route("/profile/student/<int:student_id>")
+@login_required("member")
+def student_profile(student_id):
+    user = current_user()
+    db = get_db()
+    pdata = get_student_profile_data(db, student_id)
+    if not pdata:
+        flash("Student profile not found.", "error")
+        return redirect(url_for("people_page"))
+    tab = request.args.get("tab", "about")
+    if tab not in ("about", "info", "classes"):
+        tab = "about"
+    is_own = user["student_id"] == student_id
+    owner_user = db.fetch_one("SELECT email, created_at FROM users WHERE student_id = ?", (student_id,))
+    return render_template(
+        "portal/profile.html",
+        kind="student",
+        pdata=pdata,
+        tab=tab,
+        is_own=is_own,
+        owner_user=owner_user,
+    )
+
+
+@app.route("/profile/tutor/<int:tutor_id>")
+@login_required("member")
+def tutor_profile(tutor_id):
+    user = current_user()
+    db = get_db()
+    pdata = get_tutor_profile_data(db, tutor_id)
+    if not pdata:
+        flash("Tutor profile not found.", "error")
+        return redirect(url_for("people_page"))
+    tab = request.args.get("tab", "about")
+    if tab not in ("about", "info", "classes"):
+        tab = "about"
+    is_own = user["tutor_id"] == tutor_id
+    owner_user = db.fetch_one("SELECT email, created_at FROM users WHERE tutor_id = ?", (tutor_id,))
+    subjects = db.fetch_all(
+        "SELECT s.subject_code, s.subject_name FROM tutor_subjects ts "
+        "JOIN subjects s ON s.subject_id = ts.subject_id WHERE ts.tutor_id = ?",
+        (tutor_id,),
+    )
+    availability = db.fetch_all(
+        "SELECT day, start_time, end_time FROM tutor_availability "
+        "WHERE tutor_id = ? ORDER BY day, start_time",
+        (tutor_id,),
+    )
+    languages = [
+        r["language"]
+        for r in db.fetch_all("SELECT language FROM tutor_languages WHERE tutor_id = ?", (tutor_id,))
+    ]
+    return render_template(
+        "portal/profile.html",
+        kind="tutor",
+        pdata=pdata,
+        tab=tab,
+        is_own=is_own,
+        owner_user=owner_user,
+        tutor_subjects=subjects,
+        tutor_availability=availability,
+        tutor_languages=languages,
+    )
+
+
+@app.route("/profile/settings", methods=["POST"])
+@login_required("member")
+def update_profile_settings():
+    user = current_user()
+    mode = active_mode(user)
+    db = get_db()
+    kind = "student" if mode == "Learning" else "tutor"
+    langs = request.form.getlist("languages")
     try:
-        for admin in admins:
-            db.execute(
-                "INSERT INTO users (email, password_hash, role, display_name) "
-                "VALUES (?, ?, 'admin', ?)",
-                admin,
-            )
-    finally:
-        db.close()
+        if langs:
+            set_languages(db, user["user_id"], kind, langs)
+        if kind == "tutor" and request.form.get("capacity"):
+            set_capacity(db, user["user_id"], int(request.form.get("capacity")))
+        flash("Profile preferences updated.", "success")
+    except (AuthError, ValueError) as err:
+        flash(str(err), "error")
+    return redirect(request.referrer or url_for("my_profile"))
 
 
-class TUGMAApp:
-    """Administrator portal, written for non-technical staff."""
+@app.route("/help")
+@login_required("member")
+def help_page():
+    return render_template("portal/help.html")
 
-    PAGES = [
-        "Home",
-        "Matches",
-        "People",
-        "Can these two be matched?",
-        "Accounts",
-        "Settings",
-        "How the matching works",
+
+# ---------------------------------------------------------------------------
+# Administrator / Discrete Math Portal Routes
+# ---------------------------------------------------------------------------
+@app.route("/admin")
+@login_required("admin")
+def admin_root():
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/home")
+@login_required("admin")
+def admin_home():
+    data = get_pipeline_data()
+    n_students = len(data["student_ids"])
+    n_tutors = len(data["tutor_ids"])
+    n_matched = len(data["matches"])
+    n_waiting = len(data["unmatched"])
+    unverified = data["tutors"][~data["tutors"]["verified"]].to_dict("records")
+    sname = dict(zip(data["students"]["student_id"], data["students"]["name"]))
+    unmatched_list = [
+        {
+            "name": sname.get(u["student_id"], f"Student #{u['student_id']}"),
+            "reason": (
+                "Compatible tutors are already at full capacity."
+                if u["has_compatible"]
+                else "No tutor teaches the subject, matches language, and shares free time."
+            ),
+        }
+        for u in data["unmatched"]
+    ]
+    return render_template(
+        "admin/home.html",
+        n_students=n_students,
+        n_tutors=n_tutors,
+        n_matched=n_matched,
+        n_waiting=n_waiting,
+        unverified=unverified,
+        unmatched_list=unmatched_list,
+    )
+
+
+@app.route("/admin/matches")
+@login_required("admin")
+def admin_matches():
+    data = get_pipeline_data()
+    tname = dict(zip(data["tutors"]["tutor_id"], data["tutors"]["name"]))
+    sname = dict(zip(data["students"]["student_id"], data["students"]["name"]))
+    match_rows = [
+        {
+            "student": sname.get(m["student_id"]),
+            "tutor": tname.get(m["tutor_id"]),
+            "subjects": ", ".join(data["subject_names"].get(c, c) for c in m["shared"]),
+            "times": ", ".join(fmt_range(sl) for sl in m["slots"]) or "—",
+        }
+        for m in data["matches"]
+    ]
+    assigned = Counter(t for t, _ in data["pairs"])
+    tutor_load = [
+        {
+            "name": r["name"],
+            "assigned": assigned[r["tutor_id"]],
+            "remaining": data["remaining"][r["tutor_id"]],
+            "capacity": data["capacities"][r["tutor_id"]],
+        }
+        for _, r in data["tutors"].iterrows()
+    ]
+    unmatched_rows = [
+        {
+            "name": sname.get(u["student_id"]),
+            "reason": (
+                "Compatible tutors are at full capacity."
+                if u["has_compatible"]
+                else "No compatible tutor (subject, schedule, or language mismatch)."
+            ),
+        }
+        for u in data["unmatched"]
+    ]
+    return render_template(
+        "admin/matches.html",
+        match_rows=match_rows,
+        tutor_load=tutor_load,
+        unmatched_rows=unmatched_rows,
+    )
+
+
+@app.route("/admin/people")
+@login_required("admin")
+def admin_people():
+    data = get_pipeline_data()
+    kind = request.args.get("kind", "students")
+    if kind not in ("students", "tutors"):
+        kind = "students"
+    rows = data[kind].to_dict("records")
+    return render_template("admin/people.html", kind=kind, rows=rows)
+
+
+@app.route("/admin/inspector")
+@login_required("admin")
+def admin_inspector():
+    data = get_pipeline_data()
+    tutors = data["tutors"].to_dict("records")
+    students = data["students"].to_dict("records")
+    tid = request.args.get("tutor_id", type=int) or (tutors[0]["tutor_id"] if tutors else None)
+    sid = request.args.get("student_id", type=int) or (students[0]["student_id"] if students else None)
+
+    report = None
+    if tid and sid:
+        svc = Services()
+        try:
+            report = svc.logic.evaluate(tid, sid)
+        finally:
+            svc.close()
+
+    return render_template(
+        "admin/inspector.html",
+        tutors=tutors,
+        students=students,
+        selected_tid=tid,
+        selected_sid=sid,
+        report=report,
+    )
+
+
+@app.route("/admin/accounts", methods=["GET", "POST"])
+@login_required("admin")
+def admin_accounts():
+    user = current_user()
+    db = get_db()
+    if request.method == "POST":
+        action = request.form.get("action")
+        try:
+            if action == "toggle_active":
+                target_id = request.form.get("target_user_id", type=int)
+                active = request.form.get("active") == "1"
+                set_account_active(db, user["user_id"], target_id, active)
+                flash("Account status updated.", "success")
+            elif action == "toggle_verify":
+                tutor_id = request.form.get("tutor_id", type=int)
+                verified = request.form.get("verified") == "1"
+                set_tutor_verified(db, user["user_id"], tutor_id, verified)
+                flash("Tutor verification updated.", "success")
+        except (AuthError, PermissionDenied) as err:
+            flash(str(err), "error")
+        return redirect(url_for("admin_accounts"))
+
+    accounts = list_accounts(db, user["user_id"])
+    tutors = db.fetch_all("SELECT tutor_id, name, course, grade_level, verified FROM tutors ORDER BY tutor_id")
+    return render_template("admin/accounts.html", accounts=accounts, tutors=tutors)
+
+
+@app.route("/admin/settings", methods=["GET", "POST"])
+@login_required("admin")
+def admin_settings():
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "capacity":
+            session["cap_mode"] = request.form.get("cap_mode", "stored")
+            try:
+                session["cap_uniform"] = max(1, int(request.form.get("cap_uniform", 1)))
+            except ValueError:
+                session["cap_uniform"] = 1
+            flash("Matching capacity settings saved.", "success")
+        return redirect(url_for("admin_settings"))
+
+    return render_template(
+        "admin/settings.html",
+        cap_mode=session.get("cap_mode", "stored"),
+        cap_uniform=session.get("cap_uniform", 1),
+    )
+
+
+@app.route("/admin/matching-works")
+@login_required("admin")
+def admin_matching_works():
+    data = get_pipeline_data()
+    t_count = len(data["tutor_ids"])
+    s_count = len(data["student_ids"])
+    rel_count = len(data["relation"])
+    match_count = len(data["pairs"])
+    ver = data["verification"]
+
+    # Mathematical invariants / safety checks
+    rel_set = set(data["relation"])
+    s_deg = Counter(s for _, s in data["pairs"])
+    t_deg = Counter(t for t, _ in data["pairs"])
+    total_cap = sum(data["capacities"].values())
+    max_possible = min(s_count, total_cap)
+
+    checks = [
+        ("Every match is a compatible pair (M ⊆ R)", all((t, s) in rel_set for t, s in data["pairs"])),
+        ("No student has more than one tutor (deg(s) ≤ 1)", all(d <= 1 for d in s_deg.values())),
+        ("No tutor is over their limit (deg(t) ≤ c)", all(t_deg[t] <= data["capacities"][t] for t in data["tutor_ids"])),
+        ("Matches never exceed what is possible (|M| ≤ min(|S|, Σc))", match_count <= max_possible),
+        ("The graph has two separate sides (Bipartite)", ver.get("is_bipartite", False)),
+        ("The graph's lines equal the compatible pairs (|E| = |R|)", ver.get("edge_count", 0) == rel_count),
     ]
 
-    def render(self, admin_user_id):
-        self.admin_user_id = admin_user_id
-        st.session_state.setdefault("cap_mode", "stored")
-        st.session_state.setdefault("cap_uniform", 1)
-
-        data = run_pipeline(
-            DB_PATH.stat().st_mtime_ns,
-            st.session_state["cap_mode"],
-            int(st.session_state["cap_uniform"]),
-        )
-        self.data = data
-        self.tname = dict(zip(data["tutors"]["tutor_id"], data["tutors"]["name"]))
-        self.sname = dict(
-            zip(data["students"]["student_id"], data["students"]["name"])
-        )
-
-        page = st.sidebar.radio("Go to", self.PAGES, key="admin_page")
-        {
-            "Home": self.page_home,
-            "Matches": self.page_matches,
-            "People": self.page_people,
-            "Can these two be matched?": self.page_pair,
-            "Accounts": self.page_accounts,
-            "Settings": self.page_settings,
-            "How the matching works": self.page_technical,
-        }[page]()
-
-    # -------------------------------------------------------- helpers
-    def subj(self, codes):
-        names = self.data["subject_names"]
-        return [names.get(c, c) for c in codes]
-
-    def subj_text(self, csv_codes):
-        if not csv_codes:
-            return "—"
-        return ", ".join(self.subj([c.strip() for c in csv_codes.split(",")]))
-
-    def why_unmatched(self, student_id, has_compatible):
-        if has_compatible:
-            return "Every tutor who could help is already full."
-
-        reports = [r for r in self.data["reports"] if r["student_id"] == student_id]
-        by_subject = [r for r in reports if r["subject_match"]]
-        if not by_subject:
-            return "No tutor teaches the subject this student needs."
-        by_time = [r for r in by_subject if r["time_match"]]
-        if not by_time:
-            return "The tutors who teach it are never free when the student is."
-        if not [r for r in by_time if r["language_match"]]:
-            return "The tutors who are free speak a different language."
-        return "No single tutor fits subject, free time and language together."
-
-    # ----------------------------------------------------------- Home
-    def page_home(self):
-        d = self.data
-        n_s, n_t = len(d["student_ids"]), len(d["tutor_ids"])
-        matched = len(d["pairs"])
-
-        st.header("Home")
-        if not (n_s and n_t):
-            st.warning("There are no students or no tutors yet.")
-            return
-
-        st.subheader(f"{matched} of {n_s} students have a tutor")
-        st.progress(matched / n_s)
-
-        c = st.columns(4)
-        c[0].metric("Students", n_s)
-        c[1].metric("Tutors", n_t)
-        c[2].metric("Students with a tutor", matched)
-        c[3].metric("Students still waiting", n_s - matched)
-
-        st.subheader("Needs attention")
-        if d["unmatched"]:
-            for item in d["unmatched"]:
-                name = self.sname[item["student_id"]]
-                reason = self.why_unmatched(
-                    item["student_id"], item["has_compatible"]
-                )
-                st.warning(f"**{name}** has no tutor yet. {reason}")
-        else:
-            st.success("Every student has a tutor.")
-
-        full = [t for t, left in d["remaining"].items() if left == 0]
-        if full:
-            st.info(
-                "Tutors with no spots left: "
-                + ", ".join(self.tname[t] for t in full)
-            )
-
-    # -------------------------------------------------------- Matches
-    def page_matches(self):
-        d = self.data
-        st.header("Matches")
-        st.caption(
-            "Each student is given at most one tutor, and no tutor is given "
-            "more students than they agreed to take."
-        )
-
-        st.subheader("Who is matched with whom")
-        if d["matches"]:
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "Student": self.sname[m["student_id"]],
-                            "Tutor": self.tname[m["tutor_id"]],
-                            "Subject": ", ".join(self.subj(m["shared"])),
-                            "Times they can both meet": "; ".join(
-                                fmt_range(x) for x in m["slots"]
-                            ),
-                        }
-                        for m in d["matches"]
-                    ]
-                ),
-                hide_index=True,
-            )
-            st.caption(
-                "These are possible meeting times, not booked sessions."
-            )
-        else:
-            st.info("No student has been matched yet.")
-
-        st.subheader("How busy is each tutor?")
-        load = Counter(t for t, _ in d["pairs"])
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Tutor": self.tname[t],
-                        "Students": load[t],
-                        "Spots left": d["remaining"][t],
-                        "Most students they can take": d["capacities"][t],
-                    }
-                    for t in d["tutor_ids"]
-                ]
-            ),
-            hide_index=True,
-        )
-
-        st.subheader("Students without a tutor")
-        if d["unmatched"]:
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "Student": self.sname[u["student_id"]],
-                            "Why": self.why_unmatched(
-                                u["student_id"], u["has_compatible"]
-                            ),
-                        }
-                        for u in d["unmatched"]
-                    ]
-                ),
-                hide_index=True,
-            )
-        else:
-            st.success("Every student has a tutor.")
-
-    # --------------------------------------------------------- People
-    def page_people(self):
-        d = self.data
-        st.header("People")
-        kind = st.radio("Show", ["Students", "Tutors"], horizontal=True)
-
-        if kind == "Students":
-            df = d["students"]
-            st.dataframe(
-                pd.DataFrame(
-                    {
-                        "Name": df["name"],
-                        "Course": df["course"],
-                        "Year": df["year"],
-                        "Needs help with": df["needs"].map(self.subj_text),
-                        "Languages": df["languages"],
-                    }
-                ),
-                hide_index=True,
-            )
-            ids, names = d["student_ids"], self.sname
-        else:
-            df = d["tutors"]
-            st.dataframe(
-                pd.DataFrame(
-                    {
-                        "Name": df["name"],
-                        "Course": df["course"],
-                        "Year": df["year"],
-                        "Can teach": df["subjects"].map(self.subj_text),
-                        "Languages": df["languages"],
-                        "Most students": df["capacity"],
-                        "Verified": df["verified"].map({True: "Yes", False: "No"}),
-                    }
-                ),
-                hide_index=True,
-            )
-            ids, names = d["tutor_ids"], self.tname
-            self.verify_tutors(df)
-
-        if not ids:
-            return
-
-        st.subheader("Weekly timetable")
-        person = st.selectbox(
-            kind[:-1], ids, format_func=lambda i: names[i], key=f"person_{kind}"
-        )
-
-        svc = Services()
-        try:
-            if kind == "Students":
-                classes = svc.schedules.get_student_schedule(person)
-                blocks = [
-                    {
-                        "day": c["day"],
-                        "start_time": c["start_time"],
-                        "end_time": c["end_time"],
-                        "text": c["subject_code"],
-                    }
-                    for c in classes
-                ]
-                free = svc.schedules.get_student_free_slots(person)
-                st.caption("Red = in class. Green = free for tutoring.")
-                shown = blocks + [{**f, "text": "Free"} for f in free]
-            else:
-                avail = svc.schedules.get_tutor_available_slots(person)
-                st.caption("Green = available to tutor.")
-                shown = [{**a, "text": "Available"} for a in avail]
-        finally:
-            svc.close()
-
-        st.dataframe(timetable(shown, "Free"))
-
-    def verify_tutors(self, df):
-        waiting = df[~df["verified"]]
-        st.subheader("Tutors waiting for verification")
-        if waiting.empty:
-            st.success("Every tutor is verified.")
-            return
-        st.caption("Only verified tutors are matched with students.")
-        row = st.selectbox(
-            "Tutor", list(waiting["tutor_id"]),
-            format_func=lambda t: waiting.set_index("tutor_id").loc[t, "name"],
-        )
-        if st.button("Verify this tutor"):
-            db = Database(DB_PATH)
-            try:
-                set_tutor_verified(db, self.admin_user_id, int(row), True)
-            except (AuthError, PermissionDenied) as error:
-                st.error(str(error))
-            else:
-                st.rerun()
-            finally:
-                db.close()
-
-    # ----------------------------------------------------------- Pair
-    def page_pair(self):
-        d = self.data
-        st.header("Can these two be matched?")
-        st.caption(
-            "A tutor and a student can be matched only if the tutor teaches "
-            "a subject the student needs, they are both free at some "
-            "time, and they speak a common language."
-        )
-
-        if not (d["tutor_ids"] and d["student_ids"]):
-            st.info("Add at least one tutor and one student first.")
-            return
-
-        lookup = {(r["tutor_id"], r["student_id"]): r for r in d["reports"]}
-
-        a, b = st.columns(2)
-        t = a.selectbox(
-            "Tutor", d["tutor_ids"], format_func=lambda i: self.tname[i], key="pair_t"
-        )
-        s = b.selectbox(
-            "Student",
-            d["student_ids"],
-            format_func=lambda i: self.sname[i],
-            key="pair_s",
-        )
-
-        svc = Services()
-        try:
-            teach = svc.sets.get_tutor_subjects(t)
-            need = svc.sets.get_student_needs(s)
-            langs = svc.sets.get_tutor_languages(t) & svc.sets.get_student_languages(s)
-            slots = svc.sets.availability_intersection(
-                svc.schedules.get_student_free_slots(s),
-                svc.schedules.get_tutor_available_slots(t),
-            )
-        finally:
-            svc.close()
-
-        r = lookup[(t, s)]
-        shared = sorted(teach & need)
-
-        def line(ok, yes, no):
-            (st.success if ok else st.error)(yes if ok else no)
-
-        line(
-            r["subject_match"],
-            "Subject: " + self.tname[t] + " teaches " + ", ".join(self.subj(shared)) + ".",
-            f"Subject: {self.tname[t]} does not teach anything {self.sname[s]} needs.",
-        )
-        line(
-            r["time_match"],
-            "Time: they can both meet on "
-            + "; ".join(fmt_range(x) for x in slots[:4])
-            + (" and more." if len(slots) > 4 else "."),
-            "Time: they are never free at the same time.",
-        )
-        line(
-            r["language_match"],
-            "Language: they both speak " + " and ".join(sorted(langs)) + ".",
-            "Language: they have no language in common.",
-        )
-
-        if r["compatible"]:
-            st.success(f"**{self.tname[t]} and {self.sname[s]} can be matched.**")
-        else:
-            st.error(f"**{self.tname[t]} and {self.sname[s]} cannot be matched.**")
-
-        st.subheader("Everyone at a glance")
-        rows = {}
-        for tid in d["tutor_ids"]:
-            row = {}
-            for sid in d["student_ids"]:
-                rep = lookup[(tid, sid)]
-                if rep["compatible"]:
-                    row[self.sname[sid]] = "Yes"
-                else:
-                    why = [
-                        n
-                        for n, k in (
-                            ("subject", "subject_match"),
-                            ("time", "time_match"),
-                            ("language", "language_match"),
-                            ("same person", "not_self"),
-                        )
-                        if not rep[k]
-                    ]
-                    row[self.sname[sid]] = "No: " + ", ".join(why)
-            rows[self.tname[tid]] = row
-        st.dataframe(pd.DataFrame.from_dict(rows, orient="index"))
-        st.caption("Rows are tutors, columns are students.")
-
-    # -------------------------------------------------------- Accounts
-    def page_accounts(self):
-        st.header("Accounts")
-        st.caption(
-            "People who registered and can log in. Students and tutors from "
-            "the demo data do not have accounts."
-        )
-
-        db = Database(DB_PATH)
-        try:
-            accounts = list_accounts(db, self.admin_user_id)
-        finally:
-            db.close()
-
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Name": a["name"],
-                        "Email": a["email"],
-                        "Type": a["role"].title(),
-                        "Status": "Active" if a["is_active"] else "Disabled",
-                    }
-                    for a in accounts
-                ]
-            ),
-            hide_index=True,
-        )
-
-        others = [a for a in accounts if a["user_id"] != self.admin_user_id]
-        if not others:
-            return
-
-        st.subheader("Turn an account on or off")
-        picked = st.selectbox(
-            "Account",
-            others,
-            format_func=lambda a: f"{a['name']} ({a['email']})",
-        )
-        enable = not picked["is_active"]
-        if st.button("Enable account" if enable else "Disable account"):
-            db = Database(DB_PATH)
-            try:
-                set_account_active(db, self.admin_user_id, picked["user_id"], enable)
-            except (AuthError, PermissionDenied) as error:
-                st.error(str(error))
-            else:
-                st.rerun()
-            finally:
-                db.close()
-
-    # -------------------------------------------------------- Settings
-    def page_settings(self):
-        st.header("Settings")
-
-        st.subheader("How many students can a tutor take?")
-        choice = st.radio(
-            "Rule",
-            ["Each tutor's own limit", "The same limit for every tutor"],
-            index=0 if st.session_state["cap_mode"] == "stored" else 1,
-            key="cap_choice",
-        )
-        st.session_state["cap_mode"] = (
-            "stored" if choice.startswith("Each") else "uniform"
-        )
-        if st.session_state["cap_mode"] == "uniform":
-            st.number_input(
-                "Students per tutor", 0, 50, step=1, key="cap_uniform"
-            )
-
-        st.divider()
-        st.subheader("Reset the demo data")
-        st.warning(
-            "This replaces all students, tutors and schedules with the "
-            "original demo data. Administrator accounts are kept."
-        )
-        sure = st.checkbox("Yes, I want to erase the current data")
-        if st.button("Reset demo data", disabled=not sure):
-            try:
-                reset_database(self.admin_user_id)
-            except PermissionDenied as error:
-                st.error(str(error))
-            else:
-                st.cache_data.clear()
-                st.rerun()
-
-    # ------------------------------------------------------ Technical
-    def page_technical(self):
-        d = self.data
-        st.header("How the matching works")
-        st.caption(
-            "For presentations and grading. Everything here is produced by "
-            "the same calculation that created the matches."
-        )
-
-        st.markdown(
-            "1. **Check every tutor–student pair.** A pair is *compatible* "
-            "when `SubjectMatch ∧ TimeMatch ∧ LanguageMatch` are all true.\n"
-            "2. **Draw a graph.** Tutors on the left, students on the "
-            "right, a line wherever a pair is compatible.\n"
-            "3. **Pick the best set of lines.** Give as many students as "
-            "possible a tutor, never more than one tutor per student and "
-            "never more students than a tutor's limit."
-        )
-
-        n_t, n_s = len(d["tutor_ids"]), len(d["student_ids"])
-        c = st.columns(3)
-        c[0].metric("Pairs checked (|T×S|)", n_t * n_s)
-        c[1].metric("Compatible pairs (|R|)", len(d["relation"]))
-        c[2].metric("Students matched (|M|)", len(d["pairs"]))
-
-        st.subheader("Safety checks")
-        tutor_load = Counter(t for t, _ in d["pairs"])
-        student_load = Counter(s for _, s in d["pairs"])
-        edges = set(d["relation"])
-        bound = min(n_s, sum(d["capacities"].values()))
-        checks = {
-            "Every match is a compatible pair (M ⊆ R)": all(
-                p in edges for p in d["pairs"]
-            ),
-            "No student has more than one tutor (deg(s) ≤ 1)": all(
-                v <= 1 for v in student_load.values()
-            ),
-            "No tutor is over their limit (deg(t) ≤ c)": all(
-                tutor_load[t] <= d["capacities"][t] for t in tutor_load
-            ),
-            "Matches never exceed what is possible (|M| ≤ min(|S|, Σc))": len(
-                d["pairs"]
-            )
-            <= bound,
-            "The graph has two separate sides": d["verification"]["partitions_valid"],
-            "The graph's lines equal the compatible pairs": d["verification"][
-                "edges_valid"
-            ],
-        }
-        for text, ok in checks.items():
-            (st.success if ok else st.error)(("Passed: " if ok else "FAILED: ") + text)
-
-        if n_t and n_s:
-            st.subheader("The graph, before and after")
-            visualizer = TUGMAVisualizer()
-            left, right = st.columns(2)
-            with left:
-                fig = visualizer.draw_before_matching(d["graph"])
-                st.pyplot(fig)
-                plt.close(fig)
-                st.caption("Every compatible pair.")
-            with right:
-                fig = visualizer.draw_after_matching(d["graph"], d["pairs"])
-                st.pyplot(fig)
-                plt.close(fig)
-                st.caption("The pairs chosen.")
-
-        with st.expander("Assumptions of this model"):
-            st.markdown(
-                "- A tutor's limit is the number of students over the "
-                "whole week, not per time slot.\n"
-                "- Each student gets one tutor, even if they need help in "
-                "several subjects.\n"
-                "- Meeting times are possible times only. Nothing is booked, "
-                "so two students of one tutor can be offered the same time.\n"
-                "- Several equally good matchings can exist; the one shown "
-                "is the one the calculation returned."
-            )
-
-
-def main():
-    st.set_page_config(
-        page_title="TUGMA",
-        page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🎓",
-        layout="wide",
+    return render_template(
+        "admin/matching_works.html",
+        total_pairs=t_count * s_count,
+        rel_count=rel_count,
+        match_count=match_count,
+        checks=checks,
     )
-    inject_css()
-    ensure_database()
 
-    session_user = st.session_state.get("user")
-    if session_user is None:
-        render_auth(DB_PATH)
-        return
 
-    # Re-verify the account on every rerun (disabled or deleted accounts
-    # lose access immediately).
-    db = Database(DB_PATH)
-    try:
-        user = get_user(db, session_user["user_id"])
-    finally:
-        db.close()
-
-    if user is None:
-        st.session_state.pop("user", None)
-        st.rerun()
-
-    st.session_state["user"] = user
-    with st.sidebar:
-        brand()
-    st.sidebar.markdown(f"**{user['name']}**  \n{', '.join(user['modes']) if user['modes'] else 'Administrator'}")
-    if st.sidebar.button("Log out"):
-        st.session_state.pop("user", None)
-        st.rerun()
-    st.sidebar.divider()
-
-    if user["role"] == "admin":
-        TUGMAApp().render(user["user_id"])
+@app.route("/admin/graph.png")
+@login_required("admin")
+def admin_graph_png():
+    data = get_pipeline_data()
+    kind = request.args.get("kind", "compatibility")
+    vis = TUGMAVisualizer()
+    if kind == "selected":
+        fig = vis.draw_after_matching(data["graph"], data["pairs"])
     else:
-        render_portal(user)
+        fig = vis.draw_before_matching(data["graph"])
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="#FFFFFF")
+    plt.close(fig)
+    buf.seek(0)
+    return Response(buf.getvalue(), mimetype="image/png")
 
 
-main()
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
