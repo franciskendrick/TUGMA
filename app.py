@@ -209,10 +209,11 @@ def login_page():
         password = request.form.get("password", "")
         try:
             logged_in = auth_login(get_db(), email, password)
+            if logged_in["role"] == "admin":
+                flash("Administrator accounts must sign in through Admin Login.", "error")
+                return render_template("login.html")
             session["user_id"] = logged_in["user_id"]
             session["mode"] = logged_in["modes"][0] if logged_in["modes"] else None
-            if logged_in["role"] == "admin":
-                return redirect(url_for("admin_home"))
             return redirect(url_for("home"))
         except AuthError as err:
             flash(str(err), "error")
@@ -1241,8 +1242,8 @@ def admin_matching_works():
         ("No student has more than one tutor (deg(s) ≤ 1)", all(d <= 1 for d in s_deg.values())),
         ("No tutor is over their limit (deg(t) ≤ c)", all(t_deg[t] <= data["capacities"][t] for t in data["tutor_ids"])),
         ("Matches never exceed what is possible (|M| ≤ min(|S|, Σc))", match_count <= max_possible),
-        ("The graph has two separate sides (Bipartite)", ver.get("is_bipartite", False)),
-        ("The graph's lines equal the compatible pairs (|E| = |R|)", ver.get("edge_count", 0) == rel_count),
+        ("The graph has two separate sides (Bipartite)", ver.get("partitions_valid", False)),
+        ("The graph's lines equal the compatible pairs (|E| = |R|)", ver.get("edges_valid", False)),
     ]
 
     return render_template(

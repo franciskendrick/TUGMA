@@ -35,14 +35,14 @@
         </form>
 
         <a href="{{ url_for('sessions_page', tab='pending') }}" class="icon-btn" title="Session notifications">
-          <img src="{{ url_for('serve_assets', filename='icons/Bell Icon/20/Ink.svg') }}" alt="Notifications" width="18" height="18" onerror="this.style.display='none'">
+          <img src="{{ url_for('serve_assets', filename='icons/Bell Icon/16/Ink.svg') }}" alt="Notifications" width="18" height="18" onerror="this.style.display='none'">
           {% if notif_count > 0 %}
             <span class="notif-badge">{{ notif_count }}</span>
           {% endif %}
         </a>
 
         <a href="{{ url_for('calendar_page') }}" class="icon-btn" title="Calendar">
-          <img src="{{ url_for('serve_assets', filename='icons/Calendar Icon/18/Dark Green.svg') }}" alt="Calendar" width="18" height="18" onerror="this.style.display='none'">
+          <img src="{{ url_for('serve_assets', filename='icons/Calendar Icon/16/Ink.svg') }}" alt="Calendar" width="18" height="18" onerror="this.style.display='none'">
         </a>
 
         <a href="{{ url_for('my_profile') }}" class="user-chip">
@@ -76,7 +76,7 @@
               {% endif %}
             </div>
             {% if user and user.role == 'member' and mode == 'Tutoring' and not tutor_verified %}
-              <span class="pill pill-amber" style="margin-top:4px; font-size:10px; padding:2px 8px;">Unverified</span>
+              <span class="pill pill-red" style="margin-top:4px; font-size:10px; padding:2px 8px;">Unverified</span>
             {% endif %}
           </div>
         </div>
@@ -135,6 +135,12 @@
             </div>
           {% endif %}
         {% endwith %}
+
+        {% if user and user.role == 'member' and mode == 'Tutoring' and not tutor_verified %}
+          <div class="flash flash-error" style="margin-bottom: 16px;">
+            Your tutor profile is pending administrator verification. You will appear in student matches once verified.
+          </div>
+        {% endif %}
 
         {% block content %}{% endblock %}
       </div>

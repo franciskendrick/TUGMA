@@ -3,7 +3,7 @@
 {% block title %}{{ p.name }} — Profile — TUGMA{% endblock %}
 
 {% block content %}
-{% if (is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified) %}
+{% if mode != 'Tutoring' and ((is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified)) %}
   <div class="flash flash-error" style="margin-bottom: 16px;">
     Your tutor profile is pending administrator verification. You will appear in student matches once verified.
   </div>
@@ -22,13 +22,13 @@
         <div class="profile-hero-name">{{ p.name }}</div>
         <div style="font-size:13px; color:var(--primary); font-weight:700;">De La Salle University – Dasmariñas</div>
         <div style="font-size:12.5px; color:var(--muted); margin-top:2px;">{{ p.course }}, Year {{ p.grade_level }}</div>
-        <span class="pill pill-green" style="margin-top:6px;">
-          {% if kind == 'tutor' %}
-            {{ '✓ Verified tutor' if p.verified else 'Pending verification' }}
-          {% else %}
-            ✓ Verified student
-          {% endif %}
-        </span>
+          <span class="pill {{ 'pill-red' if (kind == 'tutor' and not p.verified) else 'pill-green' }}" style="margin-top:6px;">
+            {% if kind == 'tutor' %}
+              {{ '✓ Verified tutor' if p.verified else 'Pending verification' }}
+            {% else %}
+              ✓ Verified student
+            {% endif %}
+          </span>
       </div>
     </div>
     {% if kind == 'tutor' and pdata.rating.overall %}
@@ -176,7 +176,7 @@
         <strong style="color:var(--ink); font-size:16px; display:block;">Certificates</strong>
         <span style="font-size:12px; color:var(--muted);">{{ earned_count }} earned · {{ prog_count }} in progress</span>
       </div>
-      <span class="pill pill-green">Bronze 5+, Silver 10+, Gold 20+ ratings at 4.5★ or higher</span>
+      <span class="pill pill-green">Verified tutor certificates</span>
     </div>
 
     {% if pdata.certificates %}
@@ -222,8 +222,8 @@
       <strong style="color:var(--ink);">Account</strong>
       <div style="display:flex; gap:6px;">
         <span class="pill pill-green">{{ 'Tutor Mode' if mode == 'Tutoring' else 'Student Mode' }}</span>
-        {% if (is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified) %}
-          <span class="pill pill-amber">Unverified</span>
+        {% if mode != 'Tutoring' and ((is_own and user.tutor_id and not tutor_verified) or (kind == 'tutor' and not p.verified)) %}
+          <span class="pill pill-red">Unverified</span>
         {% endif %}
       </div>
     </div>

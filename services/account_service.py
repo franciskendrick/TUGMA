@@ -68,17 +68,19 @@ def add_profile(db, user_id, kind):
 
 def set_languages(db, user_id, kind, languages):
     user = require_role(db, user_id, kind)
-    owner = user[f"{kind}_id"]
-    table = f"{kind}_languages"
     if not languages or any(l not in LANGUAGES for l in languages):
         raise AuthError("Choose at least one language.")
     connection = db.connect()
     try:
-        connection.execute(f"DELETE FROM {table} WHERE {kind}_id = ?", (owner,))
-        connection.executemany(
-            f"INSERT INTO {table} ({kind}_id, language) VALUES (?, ?)",
-            [(owner, l) for l in languages],
-        )
+        for role_kind in ("student", "tutor"):
+            owner = user.get(f"{role_kind}_id")
+            if owner:
+                table = f"{role_kind}_languages"
+                connection.execute(f"DELETE FROM {table} WHERE {role_kind}_id = ?", (owner,))
+                connection.executemany(
+                    f"INSERT INTO {table} ({role_kind}_id, language) VALUES (?, ?)",
+                    [(owner, l) for l in languages],
+                )
         connection.commit()
     except Exception:
         connection.rollback()

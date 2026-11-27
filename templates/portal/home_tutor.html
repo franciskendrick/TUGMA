@@ -5,12 +5,6 @@
 <div class="greeting-text">Good day, {{ tutor.name.split()[0] }}</div>
 <h1 class="page-title" style="margin-bottom: 18px;">Tutor Overview</h1>
 
-{% if not tutor.verified %}
-  <div class="flash flash-error" style="margin-bottom: 16px;">
-    Your tutor profile is pending administrator verification. You will appear in student matches once verified.
-  </div>
-{% endif %}
-
 <div class="stats-grid-4">
   <div class="stat-card">
     <div class="stat-num">{{ teaches|length }}</div>
@@ -107,7 +101,7 @@
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top: 4px;">
           <span class="pill pill-green">Tutor Mode</span>
           {% if not tutor.verified %}
-            <span class="pill pill-amber">Unverified</span>
+            <span class="pill pill-red">Unverified</span>
           {% endif %}
         </div>
       </div>
